@@ -20,5 +20,3 @@ For Google login, create OAuth credentials in Google Cloud Console and add `http
 ## Admin access
 Register your account, then set its `role` to `admin` in MongoDB Atlas. Admin email is configured through `ADMIN_EMAIL`.
 
-## Security notes
-Passwords are hashed, auth tokens are stored in HTTP-only cookies, API inputs are validated, sensitive endpoints are role-protected, CORS is restricted, and rate limiting is enabled. Keep all secrets in `.env`; never commit it.
