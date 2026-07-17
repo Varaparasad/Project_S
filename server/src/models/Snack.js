@@ -4,6 +4,7 @@ const snackSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 100 },
   description: { type: String, default: '', maxlength: 1000 },
   imageUrl: { type: String, default: '' },
+  imageUrls: { type: [String], default: [] },
   category: { type: String, default: 'Snacks', trim: true },
   price: { type: Number, required: true, min: 0 },
   advanceAmount: { type: Number, required: true, min: 0 },
