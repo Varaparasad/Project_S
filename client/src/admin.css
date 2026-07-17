@@ -1,0 +1,9 @@
+.admin-menu{margin-top:72px;padding-top:42px;border-top:1px solid var(--line)}
+.admin-menu-layout{display:grid;grid-template-columns:1fr 430px;gap:25px;align-items:start}
+.admin-snack-list{display:grid;gap:10px}
+.admin-snack{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;align-items:center;gap:11px}
+.admin-snack.inactive{opacity:.6}.admin-snack p,.admin-snack small{font-size:12px;color:#6d776f;margin:4px 0}.snack-actions{margin-left:auto;display:flex;gap:8px}
+.snack-form{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:20px;display:flex;flex-direction:column;gap:11px;position:sticky;top:92px}
+.snack-form h3{font-family:'Playfair Display';font-size:25px;margin:0}.snack-form label{font-size:12px;font-weight:700;display:grid;gap:5px}.snack-form label span{font-weight:400;color:#788078}
+.snack-form input,.snack-form textarea{border:1px solid #d8d2c8;border-radius:7px;padding:10px;background:#fff}.snack-form textarea{min-height:65px;resize:vertical}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.checks{display:flex;gap:13px;flex-wrap:wrap}.checks label{display:flex;align-items:center;gap:5px}
+@media(max-width:900px){.admin-menu-layout{grid-template-columns:1fr}.snack-form{position:static}}
