@@ -24,6 +24,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', creden
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 500, standardHeaders: 'draft-7', legacyHeaders: false }));
+app.get("/ping", (req, res) => res.status(200).send("ok"));
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/snacks', snackRoutes);
@@ -32,7 +33,6 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use((err, req, res, next) => { console.error(err); res.status(err.status || 500).json({ message: err.message || 'Something went wrong.' }); });
-
 const startServer = async (preferredPort) => {
   const server = app.listen(preferredPort, () => {
     const address = server.address();
