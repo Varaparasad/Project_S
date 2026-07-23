@@ -11,11 +11,13 @@ const orderSchema = new mongoose.Schema({
   customerName: String, customerEmail: String, customerPhone: String,
   fulfilment: { type: String, enum: ['pickup', 'delivery'], required: true },
   deliveryAddress: { type: String, default: '' },
+  latitude: Number,
+  longitude: Number,
   items: { type: [itemSchema], validate: v => v.length > 0 },
   totalAmount: { type: Number, required: true },
-  advanceRequired: { type: Number, required: true },
+  advanceRequired: { type: Number, default: 0 },
   expectedReadyDate: { type: Date, required: true },
-  status: { type: String, enum: ['request_received', 'contacting_customer', 'awaiting_advance_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'], default: 'request_received' },
+  status: { type: String, enum: ['request_received', 'contacting_customer', 'awaiting_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'], default: 'request_received' },
   adminNote: { type: String, default: '', maxlength: 1000 }
 }, { timestamps: true });
 

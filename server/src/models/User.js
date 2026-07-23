@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema({
   googleId: { type: String, unique: true, sparse: true },
   phone: { type: String, trim: true, maxlength: 20 },
   address: { type: String, trim: true, maxlength: 500 },
-  addresses: [{ label: { type: String, trim: true, maxlength: 40 }, line: { type: String, trim: true, maxlength: 300 }, city: { type: String, trim: true, maxlength: 80 }, pincode: { type: String, trim: true, maxlength: 12 }, isDefault: { type: Boolean, default: false } }],
+  addresses: [{ label: { type: String, trim: true, maxlength: 40 }, line: { type: String, trim: true, maxlength: 300 }, city: { type: String, trim: true, maxlength: 80 }, pincode: { type: String, trim: true, maxlength: 12 }, latitude: Number, longitude: Number, isDefault: { type: Boolean, default: false } }],
   role: { type: String, enum: ['customer', 'admin'], default: 'customer' }
 }, { timestamps: true });
 

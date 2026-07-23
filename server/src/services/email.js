@@ -56,6 +56,19 @@ const isDelivery = (order) =>
 /*  Message builders                                                  */
 /* ------------------------------------------------------------------ */
 
+const getCleanMapsUrl = (rawAddress = '', lat = null, lng = null) => {
+  if (lat && lng) {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  }
+  if (!rawAddress) return '';
+  // Strip label prefix like "Home: ", "Work: ", etc. to get exact street line, city & pincode
+  const clean = String(rawAddress)
+    .replace(/^[^:]+:\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean)}`;
+};
+
 function buildWhatsAppMessage(order, id) {
   const delivery = isDelivery(order);
 
@@ -72,9 +85,6 @@ function buildWhatsAppMessage(order, id) {
     ``,
     `Total:`,
     formatMoney(order.totalAmount),
-    ``,
-    `Advance:`,
-    formatMoney(order.advanceRequired),
     ``,
     `Fulfilment:`,
     delivery ? "Delivery" : "Pickup",
@@ -111,15 +121,20 @@ function buildTelegramMessage(order, id) {
     `💰 Total`,
     formatMoney(order.totalAmount),
     ``,
-    `💵 Advance`,
-    formatMoney(order.advanceRequired),
-    ``,
     `📦 Fulfilment`,
     delivery ? "Delivery" : "Pickup",
   ];
 
-  if (delivery) {
-    lines.push(``, `📍 Delivery Address`, ``, order.deliveryAddress || "-");
+  if (delivery && order.deliveryAddress) {
+    const cleanUrl = getCleanMapsUrl(order.deliveryAddress, order.latitude, order.longitude);
+    lines.push(
+      ``,
+      `📍 Delivery Address`,
+      order.deliveryAddress,
+      ``,
+      `🗺️ Exact GPS Pin / Maps Link:`,
+      cleanUrl
+    );
   }
 
   return lines.join("\n");
@@ -140,9 +155,9 @@ function buildEmailHtml(order, id, whatsappUrl, mapsUrl) {
         💬 Open WhatsApp
       </a>
       ${
-        delivery
-          ? `<a href="${mapsUrl}" style="display:inline-block;background:#4285F4;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">
-              📍 Open Maps
+        delivery && mapsUrl
+          ? `<a href="${mapsUrl}" target="_blank" style="display:inline-block;background:#4285F4;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">
+              📍 Open Google Maps Pin
             </a>`
           : ""
       }
@@ -167,7 +182,6 @@ function buildEmailHtml(order, id, whatsappUrl, mapsUrl) {
 
     <p>
       <b>💰 Total:</b> ${formatMoney(order.totalAmount)}<br/>
-      <b>💵 Advance:</b> ${formatMoney(order.advanceRequired)}<br/>
       <b>📦 Fulfilment:</b> ${delivery ? "Delivery" : "Pickup"}
     </p>
 
@@ -234,11 +248,7 @@ export async function sendOrderAlert(order) {
     buildWhatsAppMessage(order, id)
   )}`;
 
-  const mapsUrl = delivery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        order.deliveryAddress || ""
-      )}`
-    : null;
+  const mapsUrl = delivery ? getCleanMapsUrl(order.deliveryAddress, order.latitude, order.longitude) : null;
 
   /* ---------------- Telegram (primary) ---------------- */
 

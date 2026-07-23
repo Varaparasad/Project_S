@@ -2,60 +2,1717 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, Filter, LogOut, MapPin, Menu as MenuIcon, MessageCircle, Minus, Phone, Plus, Search, ShoppingBag, Star, X } from 'lucide-react';
+import { Clock, Filter, LogOut, MapPin, Menu as MenuIcon, MessageCircle, Minus, Phone, Plus, Search, ShoppingBag, Star, X, Upload, Headphones, Sparkles, Mail, CheckCircle, Trash2, ArrowRight, ShoppingCart, ChevronLeft, ChevronRight, Check, AlertCircle, Home, FileText } from 'lucide-react';
 import { api } from './api';
 import './styles.css';
 import './admin.css';
 import './features.css';
 
-const Auth = createContext(); const Cart = createContext();
-const useAuth = () => useContext(Auth); const useCart = () => useContext(Cart);
-const format = number => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(number);
-const statusLabels = { request_received: 'Order request received', contacting_customer: 'We are contacting you', awaiting_advance_confirmation: 'Awaiting advance confirmation', confirmed: 'Confirmed', preparing: 'Preparing', ready_for_pickup: 'Ready for pickup', out_for_delivery: 'Out for delivery', delivered: 'Delivered', cancelled: 'Cancelled' };
+const Auth = createContext();
+const Cart = createContext();
+const useAuth = () => useContext(Auth);
+const useCart = () => useContext(Cart);
 
-function Header() { const { user, logout } = useAuth(); const { count } = useCart(); const [open, setOpen] = useState(false); const closeMenu = () => setOpen(false); const admin = user?.role === 'admin'; return <header><div className="header-inner"><Link className="brand" to="/" onClick={closeMenu}>Crave<span>Craft</span></Link><button className={`menu-toggle ${open ? 'is-open' : ''}`} type="button" onClick={() => setOpen(value => !value)} aria-label="Toggle navigation"><MenuIcon size={20}/></button><nav className={`nav-links ${open ? 'open' : ''}`}><Link to="/" onClick={closeMenu}>Home</Link>{!admin && <Link to="/menu" onClick={closeMenu}>Browse snacks</Link>}{!admin && user && <><Link to="/orders" onClick={closeMenu}>My orders</Link><Link to="/profile" onClick={closeMenu}>My profile</Link></>}{admin && <><Link to="/order-desk" onClick={closeMenu}>Order Desk</Link><Link to="/menu-manager" onClick={closeMenu}>Menu Manager</Link></>}{!admin && <Link className="cart-link" to="/cart" onClick={closeMenu}><ShoppingBag size={18}/> Cart <b>{count}</b></Link>}{user ? <button className="text-btn" onClick={() => { logout(); closeMenu(); }}><LogOut size={17}/> Logout</button> : <Link className="button small" to="/login" onClick={closeMenu}>Login</Link>}</nav></div></header> }
-function AppShell() { const [user, setUser] = useState(undefined); const [items, setItems] = useState(() => JSON.parse(localStorage.getItem('snack-cart') || '[]')); const [notice, setNotice] = useState(''); const nav = useNavigate(); const qc = useQueryClient(); useEffect(() => { api.get('/auth/me').then(result => setUser(result.data.user)).catch(() => setUser(null)); }, []); useEffect(() => localStorage.setItem('snack-cart', JSON.stringify(items)), [items]); const cart = useMemo(() => ({ items, count: items.reduce((sum, item) => sum + item.quantity, 0), add: snack => { setItems(old => { const current = old.find(item => item._id === snack._id); return current ? old.map(item => item._id === snack._id ? { ...item, quantity: item.quantity + 1 } : item) : [...old, { ...snack, quantity: 1 }]; }); setNotice(`${snack.name} added to cart`); setTimeout(() => setNotice(''), 2500); }, change: (id, quantity) => setItems(old => quantity < 1 ? old.filter(item => item._id !== id) : old.map(item => item._id === id ? { ...item, quantity } : item)), clear: () => setItems([]) }), [items]); return <Auth.Provider value={{ user, setUser, logout: async () => { await api.post('/auth/logout'); setUser(null); qc.clear(); nav('/'); } }}><Cart.Provider value={cart}><Header/>{notice && <div className="cart-toast"><ShoppingBag size={18}/>{notice}<X size={16} onClick={() => setNotice('')}/></div>}<main><Routes><Route path="/" element={<EnhancedHome/>}/><Route path="/menu" element={<Menu/>}/><Route path="/snack/:id" element={<SnackDetail/>}/><Route path="/login" element={<Login/>}/><Route path="/profile" element={<Profile/>}/><Route path="/cart" element={<CartPage/>}/><Route path="/checkout" element={<EnhancedCheckout/>}/><Route path="/orders" element={<Orders/>}/><Route path="/order-desk" element={<EnhancedOrderDesk/>}/><Route path="/menu-manager" element={<EnhancedMenuManager/>}/><Route path="*" element={<Navigate to="/"/>}/></Routes></main></Cart.Provider></Auth.Provider> }
-function Rating({ snack }) { return snack.reviewCount ? <span className="rating"><Star size={14} fill="currentColor"/> {snack.averageRating} <small>({snack.reviewCount})</small></span> : <span className="no-rating">New · no ratings yet</span> }
-function SnackCard({ snack }) { const { add } = useCart(); const instant = snack.preparationType === 'instant'; return <article className="card"><Link to={`/snack/${snack._id}`}><div className="image">{snack.imageUrl ? <img src={snack.imageUrl} alt={snack.name}/> : <span>{snack.name.slice(0, 1)}</span>}<div className={`badge ${instant ? 'instant-badge' : ''}`}><Clock size={14}/>{instant ? 'Available now' : `${snack.minimumPreparationDays} day${snack.minimumPreparationDays !== 1 ? 's' : ''}`}</div></div></Link><div className="card-body"><p className="category">{instant ? 'Available now · ' : ''}{snack.category}</p><Link to={`/snack/${snack._id}`}><h3>{snack.name}</h3></Link><Rating snack={snack}/><p className="description">{snack.description || 'Prepared with care after your order is confirmed.'}</p><div className="prices"><strong>{format(snack.price)}</strong><span>{instant ? 'confirm in 10–15 min' : `Advance ${format(snack.advanceAmount)}`}</span></div><div className="card-footer"><span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span><button className="button small" onClick={() => add(snack)}>Add</button></div></div></article> }
-function PopularRail({ snacks }) { const rail = useRef(null); const [paused, setPaused] = useState(false); useEffect(() => { const timer = setInterval(() => { if (!paused && rail.current) { const el = rail.current; el.scrollLeft = el.scrollLeft + .7; if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) el.scrollLeft = 0; } }, 18); return () => clearInterval(timer); }, [paused]); return <div className="popular-rail" ref={rail} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onTouchStart={() => setPaused(true)} onTouchEnd={() => setPaused(false)}>{snacks.map(snack => <div className="rail-card" key={snack._id}><SnackCard snack={snack}/></div>)}</div> }
-function Home() { const { data: snacks = [], isLoading } = useQuery({ queryKey: ['snacks'], queryFn: () => api.get('/snacks').then(result => result.data.snacks) }); const popular = snacks.filter(snack => snack.isPopular); const rail = (popular.length ? popular : snacks).slice(0, 8); return <><section className="hero"><p className="eyebrow">Made after you order</p><h1>Snacks worth <em>waiting</em> for.</h1><p>Freshly prepared in small batches. Send an order request—we’ll call to confirm every detail.</p><Link className="button" to="/menu">Explore more snacks</Link></section><section className="section"><div className="section-title"><div><p className="eyebrow">Customer favourites</p><h2>Popular right now</h2></div><p className="muted">Hover or touch the row to pause it.</p></div>{isLoading ? <p>Loading favourites…</p> : rail.length ? <PopularRail snacks={rail}/> : <div className="empty">The menu is being prepared. Please check back soon.</div>}</section></> }
-function Menu() { const { data: snacks = [], isLoading } = useQuery({ queryKey: ['snacks'], queryFn: () => api.get('/snacks').then(result => result.data.snacks) }); const [search, setSearch] = useState(''); const [category, setCategory] = useState('all'); const [days, setDays] = useState('all'); const categories = [...new Set(snacks.map(snack => snack.category))]; const filtered = snacks.filter(snack => (!search || snack.name.toLowerCase().includes(search.toLowerCase())) && (category === 'all' || snack.category === category) && (days === 'all' || (days === 'instant' ? snack.preparationType === 'instant' : days === 'quick' ? snack.preparationType !== 'instant' && snack.minimumPreparationDays <= 2 : snack.preparationType !== 'instant' && snack.minimumPreparationDays >= 3))); return <section className="section"><div className="section-title"><div><p className="eyebrow">The full collection</p><h1>Browse snacks</h1></div><p className="muted">Tap any snack for details and customer reviews.</p></div><div className="filters"><label><Search size={17}/><input placeholder="Search snacks" value={search} onChange={event => setSearch(event.target.value)}/></label><label><Filter size={17}/><select value={category} onChange={event => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map(value => <option key={value} value={value}>{value}</option>)}</select></label><label><Clock size={17}/><select value={days} onChange={event => setDays(event.target.value)}><option value="all">Any preparation time</option><option value="instant">Available now</option><option value="quick">Ready in 0–2 days</option><option value="longer">3+ days preparation</option></select></label></div>{isLoading ? <p>Loading menu…</p> : <><p className="results">{filtered.length} snack{filtered.length !== 1 && 's'} found</p><div className="grid">{filtered.map(snack => <SnackCard snack={snack}/>)}</div></>}</section> }
-function Login() { const { user, setUser } = useAuth(); const [form, setForm] = useState({ name: '', email: '', password: '' }); const [register, setRegister] = useState(false); const [error, setError] = useState(''); const nav = useNavigate(); if (user) return <Navigate to="/"/>; const submit = async event => { event.preventDefault(); setError(''); try { const response = await api.post(register ? '/auth/register' : '/auth/login', register ? form : { email: form.email, password: form.password }); setUser(response.data.user); nav('/'); } catch (err) { setError(err.response?.data?.message || 'Please try again.'); } }; return <div className="auth"><form onSubmit={submit}><p className="eyebrow">Welcome</p><h1>{register ? 'Create your account' : 'Welcome back'}</h1>{error && <p className="error">{error}</p>}{register && <input placeholder="Your name" required value={form.name} onChange={event => setForm({ ...form, name: event.target.value })}/>}<input type="email" placeholder="Email address" required value={form.email} onChange={event => setForm({ ...form, email: event.target.value })}/><input type="password" placeholder="Password (minimum 8 characters)" required minLength="8" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })}/><button className="button full">{register ? 'Create account' : 'Log in'}</button><a className="google" href={`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/google`}>Continue with Google</a><button type="button" className="text-btn center" onClick={() => setRegister(!register)}>{register ? 'Already have an account? Log in' : 'New here? Create an account'}</button></form></div> }
-function CartPage() { const { items, change } = useCart(); const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0); const advance = items.reduce((sum, item) => sum + item.advanceAmount * item.quantity, 0); const hasInstant = items.some(item => item.preparationType === 'instant'); return <section className="section narrow"><p className="eyebrow">Your selection</p><h1>Cart</h1>{!items.length ? <div className="empty">Your cart is empty. <Link to="/menu">Browse our snacks</Link></div> : <><div className="cart-list">{items.map(item => <div className="cart-item" key={item._id}><div className="mini-image">{item.imageUrl ? <img src={item.imageUrl} alt=""/> : item.name[0]}</div><div><h3>{item.name}</h3><p>{format(item.price)} · {item.preparationType === 'instant' ? 'Available now · no advance' : `Advance ${format(item.advanceAmount)}`}</p></div><div className="quantity"><button onClick={() => change(item._id, item.quantity - 1)}><Minus size={15}/></button><b>{item.quantity}</b><button onClick={() => change(item._id, item.quantity + 1)}><Plus size={15}/></button></div></div>)}</div><div className="summary"><div><span>Total</span><strong>{format(total)}</strong></div>{advance > 0 && <div><span>Advance to be confirmed over call</span><strong>{format(advance)}</strong></div>}{hasInstant && <p className="instant-checkout">For available-now items, we’ll call or WhatsApp within 10–15 minutes.</p>}<Link className="button full" to="/checkout">Send order request</Link></div></>}</section> }
-function Checkout() { const { user, setUser } = useAuth(); const { items, clear } = useCart(); const nav = useNavigate(); const [form, setForm] = useState({ phone: user?.phone || '', fulfilment: 'pickup', addressId: user?.addresses?.find(address => address.isDefault)?._id || '' }); const [newAddress, setNewAddress] = useState(false); const [address, setAddress] = useState({ label: 'Home', line: '', city: '', pincode: '', isDefault: true }); const [error, setError] = useState(''); const mutation = useMutation({ mutationFn: async () => { let deliveryAddress = ''; if (form.fulfilment === 'delivery') { let chosen = user.addresses?.find(item => item._id === form.addressId); if (newAddress) { const response = await api.post('/auth/addresses', { ...address, isDefault: true }); setUser(response.data.user); chosen = response.data.user.addresses.find(item => item.isDefault); } if (!chosen) throw new Error('Choose a saved address or add a new address.'); deliveryAddress = `${chosen.label}: ${chosen.line}, ${chosen.city} - ${chosen.pincode}`; } return api.post('/orders', { phone: form.phone, fulfilment: form.fulfilment, deliveryAddress, items: items.map(item => ({ snackId: item._id, quantity: item.quantity })) }); }, onSuccess: () => { clear(); nav('/orders'); }, onError: err => setError(err.response?.data?.message || err.message || 'Could not send your order request.') }); if (!user) return <Navigate to="/login"/>; if (!items.length) return <Navigate to="/cart"/>; const permitted = snack => form.fulfilment === 'pickup' ? snack.pickupAvailable : snack.deliveryAvailable; const advance = items.reduce((sum, item) => sum + item.advanceAmount * item.quantity, 0); const hasInstant = items.some(item => item.preparationType === 'instant'); const days = Math.max(...items.filter(item => item.preparationType !== 'instant').map(item => item.minimumPreparationDays), 0); return <section className="section narrow"><p className="eyebrow">Almost there</p><h1>Send an order request</h1><p className="muted">No payment is collected here. We will call you personally to confirm all order details.</p><form className="checkout" onSubmit={event => { event.preventDefault(); if (!items.every(permitted)) return setError(`One or more snacks are not available for ${form.fulfilment}.`); mutation.mutate(); }}>{error && <p className="error">{error}</p>}<label>Phone number<input required minLength="7" value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })}/></label><label>How would you like to receive your order?<select value={form.fulfilment} onChange={event => setForm({ ...form, fulfilment: event.target.value })}><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>{form.fulfilment === 'delivery' && <div className="address-picker"><b>Delivery address</b>{user.addresses?.length > 0 && !newAddress && <>{user.addresses.map(item => <label className="saved-address" key={item._id}><input type="radio" name="address" checked={form.addressId === item._id} onChange={() => setForm({ ...form, addressId: item._id })}/><span><b>{item.label}</b><br/>{item.line}, {item.city} - {item.pincode}</span></label>)}<button className="text-btn" type="button" onClick={() => setNewAddress(true)}>+ Add a new address</button></>}{(newAddress || !user.addresses?.length) && <div className="new-address"><label>Label<input required value={address.label} onChange={event => setAddress({ ...address, label: event.target.value })}/></label><label>Address line<textarea required value={address.line} onChange={event => setAddress({ ...address, line: event.target.value })}/></label><div className="form-grid"><label>City<input required value={address.city} onChange={event => setAddress({ ...address, city: event.target.value })}/></label><label>PIN code<input required value={address.pincode} onChange={event => setAddress({ ...address, pincode: event.target.value })}/></label></div>{user.addresses?.length > 0 && <button className="text-btn" type="button" onClick={() => setNewAddress(false)}>Use a saved address</button>}</div>}</div>}<div className="callout"><Phone size={20}/><div><b>{hasInstant ? 'We’ll call or WhatsApp within 10–15 minutes' : 'We’ll call to confirm'}</b><p>{advance > 0 ? `Advance amount: ${format(advance)}. ` : 'No advance is required for available-now items. '}{days > 0 ? `Minimum preparation: ${days} day${days !== 1 ? 's' : ''}.` : 'Your item is available now.'}</p></div></div><button className="button full" disabled={mutation.isPending}>{mutation.isPending ? 'Sending…' : 'Send order request'}</button></form></section> }
-function OrderCard({ order, admin = false, onStatus }) { const [status, setStatus] = useState(order.status); const whatsapp = `https://wa.me/${order.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${order.customerName}, this is ${import.meta.env.VITE_STORE_NAME || 'our snack store'} regarding your order #${order._id.slice(-6)}. We would like to confirm your order details and advance payment by phone.`)}`; return <article className="order-card"><div className="order-top"><div><p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p><h3>{statusLabels[order.status]}</h3><p className="muted">{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })} · Ready from {new Date(order.expectedReadyDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p></div><span className="status">{statusLabels[order.status]}</span></div><p>{order.items.map(item => `${item.name} × ${item.quantity}`).join(', ')}</p><div className="order-bottom"><span>{order.fulfilment === 'pickup' ? 'Pickup' : <><MapPin size={15}/> Delivery</>} · Total {format(order.totalAmount)} · Advance {format(order.advanceRequired)}</span>{admin && <div className="admin-actions"><a className="whatsapp" href={whatsapp} target="_blank" rel="noreferrer"><MessageCircle size={17}/> WhatsApp</a><a className="call" href={`tel:${order.customerPhone}`}><Phone size={16}/> Call</a><select value={status} onChange={event => { setStatus(event.target.value); onStatus(order._id, event.target.value); }}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>}</div></article> }
-function Orders() { const { user } = useAuth(); const { data, isLoading } = useQuery({ queryKey: ['orders'], queryFn: () => api.get('/orders/my-orders').then(result => result.data.orders), enabled: !!user }); if (!user) return <Navigate to="/login"/>; return <section className="section narrow"><p className="eyebrow">Your requests</p><h1>My orders</h1>{isLoading ? <p>Loading orders…</p> : !data?.length ? <div className="empty">You have no order requests yet.</div> : <div className="order-list">{data.map(order => <OrderCard key={order._id} order={order}/>)}</div>}</section> }
-function InstantSettings() { const { user } = useAuth(); const qc = useQueryClient(); const { data } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(result => result.data.settings), enabled: user?.role === 'admin' }); const [form, setForm] = useState(null); const [notice, setNotice] = useState(''); useEffect(() => { if (data) setForm({ instantStartTime: data.instantStartTime, instantEndTime: data.instantEndTime }); }, [data]); const save = useMutation({ mutationFn: values => api.patch('/settings', values), onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); setNotice('Instant timings updated successfully.'); setTimeout(() => setNotice(''), 2500); }, onError: () => setNotice('Could not save the timings. Please try again.') }); if (!form) return null; return <form className="instant-settings" onSubmit={event => { event.preventDefault(); save.mutate(form); }}><div><b>Instant-order hours</b><p>Available-now snacks can only be ordered during these hours (India time).</p></div><label>Start<input type="time" value={form.instantStartTime} onChange={event => setForm({ ...form, instantStartTime: event.target.value })}/></label><label>End<input type="time" value={form.instantEndTime} onChange={event => setForm({ ...form, instantEndTime: event.target.value })}/></label><button className="button small">Save hours</button>{notice && <p className="success-note">{notice}</p>}</form> }
-function InventoryPanel() { const { user } = useAuth(); const qc = useQueryClient(); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(result => result.data.snacks), enabled: user?.role === 'admin' }); const update = useMutation({ mutationFn: values => api.patch(`/snacks/${values.id}`, values), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); } }); return <div className="inventory"><h2>Stock and selling unit</h2><p className="muted">Set whether the listed price is per piece, kilogram, or litre. Stock reduces only when you change an order to Confirmed.</p>{snacks.map(snack => <div className="inventory-row" key={snack._id}><span><b>{snack.name}</b><small>{snack.unit === 'piece' ? 'pieces' : snack.unit}s available</small></span><div className="admin-inline-fields"><select defaultValue={snack.unit || 'piece'} onChange={event => update.mutate({ id: snack._id, unit: event.target.value })}><option value="piece">Per piece</option><option value="kg">Per kg</option><option value="litre">Per litre</option></select><input type="number" min="0" defaultValue={snack.availableQuantity} placeholder="Stock" onBlur={event => { const value = Number(event.target.value); if (value !== snack.availableQuantity) update.mutate({ id: snack._id, availableQuantity: value }); }}/></div></div>)}</div> }
-function OrderDesk() { const { user } = useAuth(); const qc = useQueryClient(); const [filter, setFilter] = useState('all'); const { data, isLoading } = useQuery({ queryKey: ['admin-orders', filter], queryFn: () => api.get('/orders/admin', { params: filter === 'all' ? {} : { kind: filter } }).then(result => result.data.orders), enabled: user?.role === 'admin', refetchInterval: 15000 }); const mutation = useMutation({ mutationFn: ({ id, status }) => api.patch(`/orders/admin/${id}/status`, { status }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-orders'] }); qc.invalidateQueries({ queryKey: ['admin-snacks'] }); } }); if (!user) return <Navigate to="/login"/>; if (user.role !== 'admin') return <Navigate to="/"/>; return <section className="section"><div className="section-title"><div><p className="eyebrow">Customer follow-up</p><h1>Order Desk</h1></div><p className="muted">New order requests are emailed to you. Call or WhatsApp customers from here.</p></div><InstantSettings/><div className="filters"><label><Filter size={17}/><select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All orders</option><option value="instant">Instant orders</option><option value="made_to_order">Made-to-order</option></select></label></div>{isLoading ? <p>Loading orders…</p> : <div className="order-list">{data?.length ? data.map(order => <OrderCard key={order._id} admin order={order} onStatus={(id, status) => mutation.mutate({ id, status })}/>) : <div className="empty">No orders yet.</div>}</div>}<InventoryPanel/></section> }
-const blankSnack = { name: '', description: '', imageUrl: '', category: 'Snacks', price: '', advanceAmount: '', minimumPreparationDays: '1', preparationType: 'made_to_order', unit: 'piece', availableQuantity: 9999, pickupAvailable: true, deliveryAvailable: false, isPopular: false, active: true };
-function MenuManager() { const { user } = useAuth(); const qc = useQueryClient(); const [editing, setEditing] = useState(null); const [form, setForm] = useState(blankSnack); const { data: snacks } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(result => result.data.snacks), enabled: user?.role === 'admin' }); const save = useMutation({ mutationFn: values => editing ? api.patch(`/snacks/${editing}`, values) : api.post('/snacks', values), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); setEditing(null); setForm(blankSnack); } }); const toggle = useMutation({ mutationFn: snack => api.patch(`/snacks/${snack._id}`, { active: !snack.active }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); } }); if (!user) return <Navigate to="/login"/>; if (user.role !== 'admin') return <Navigate to="/"/>; const instant = form.preparationType === 'instant'; const edit = snack => { setEditing(snack._id); setForm({ ...snack, preparationType: snack.preparationType || 'made_to_order' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }; return <section className="section"><div className="section-title"><div><p className="eyebrow">Your products</p><h1>Menu Manager</h1></div><p className="muted">Add, update, feature, or hide snacks shown to customers.</p></div><div className="admin-menu-layout"><form className="snack-form" onSubmit={event => { event.preventDefault(); save.mutate({ ...form, price: Number(form.price), advanceAmount: instant ? 0 : Number(form.advanceAmount), minimumPreparationDays: instant ? 0 : Number(form.minimumPreparationDays) }); }}><h3>{editing ? 'Edit snack' : 'Create a snack'}</h3><label>Snack name<input required value={form.name} onChange={event => setForm({ ...form, name: event.target.value })}/></label><label>Image URL <span>(optional)</span><input type="url" placeholder="https://..." value={form.imageUrl} onChange={event => setForm({ ...form, imageUrl: event.target.value })}/></label><label>Description<textarea value={form.description} onChange={event => setForm({ ...form, description: event.target.value })}/></label><label>Availability<select value={form.preparationType} onChange={event => setForm({ ...form, preparationType: event.target.value })}><option value="made_to_order">Made to order — advance required</option><option value="instant">Available now — no advance</option></select></label><div className="form-grid"><label>Category<input value={form.category} onChange={event => setForm({ ...form, category: event.target.value })}/></label><label>Price (₹)<input type="number" min="0" required value={form.price} onChange={event => setForm({ ...form, price: event.target.value })}/></label><label>Selling unit<select value={form.unit} onChange={event => setForm({ ...form, unit: event.target.value })}><option value="piece">Per piece</option><option value="kg">Per kg</option><option value="litre">Per litre</option></select></label><label>Stock<input type="number" min="0" value={form.availableQuantity} onChange={event => setForm({ ...form, availableQuantity: Number(event.target.value) })}/></label>{!instant && <><label>Advance (₹)<input type="number" min="0" required value={form.advanceAmount} onChange={event => setForm({ ...form, advanceAmount: event.target.value })}/></label><label>Preparation days<input type="number" min="0" required value={form.minimumPreparationDays} onChange={event => setForm({ ...form, minimumPreparationDays: event.target.value })}/></label></>}</div>{instant && <p className="instant-note">Available now: no advance is taken. Customer is told you will call or WhatsApp within 10–15 minutes.</p>}<div className="checks"><label><input type="checkbox" checked={form.pickupAvailable} onChange={event => setForm({ ...form, pickupAvailable: event.target.checked })}/> Pickup</label><label><input type="checkbox" checked={form.deliveryAvailable} onChange={event => setForm({ ...form, deliveryAvailable: event.target.checked })}/> Delivery</label><label><input type="checkbox" checked={form.isPopular} onChange={event => setForm({ ...form, isPopular: event.target.checked })}/> Show as popular</label></div>{save.isError && <p className="error">Could not save snack. Check all fields.</p>}<button className="button full">{save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add snack to menu'}</button>{editing && <button className="text-btn center" type="button" onClick={() => { setEditing(null); setForm(blankSnack); }}>Cancel edit</button>}</form><div className="admin-snack-list">{snacks?.map(snack => <div className={`admin-snack ${!snack.active ? 'inactive' : ''}`} key={snack._id}><div className="mini-image">{snack.imageUrl ? <img src={snack.imageUrl} alt=""/> : snack.name[0]}</div><div><b>{snack.name}</b><p>{format(snack.price)} · {snack.preparationType === 'instant' ? 'Available now · no advance' : `Advance ${format(snack.advanceAmount)} · ${snack.minimumPreparationDays} days`}</p><small>{snack.active ? 'Visible to customers' : 'Hidden from customers'}{snack.isPopular && ' · Popular'}</small></div><div className="snack-actions"><button className="text-btn" onClick={() => edit(snack)}>Edit</button><button className="text-btn" onClick={() => toggle.mutate(snack)}>{snack.active ? 'Hide' : 'Show'}</button></div></div>) || <p>Loading menu…</p>}</div></div></section> }
-function SnackDetail() { const { id } = useParams(); const { user } = useAuth(); const { add } = useCart(); const qc = useQueryClient(); const [rating, setRating] = useState(5); const [comment, setComment] = useState(''); const { data: snackResult, isLoading } = useQuery({ queryKey: ['snack', id], queryFn: () => api.get(`/snacks/${id}`).then(result => result.data) }); const { data: reviewResult } = useQuery({ queryKey: ['reviews', id], queryFn: () => api.get(`/reviews/snack/${id}`).then(result => result.data) }); const { data: orders = [] } = useQuery({ queryKey: ['orders'], queryFn: () => api.get('/orders/my-orders').then(result => result.data.orders), enabled: !!user }); const delivered = orders.find(order => order.status === 'delivered' && order.items.some(item => item.snack === id || item.snack?._id === id)); const reviewMutation = useMutation({ mutationFn: () => api.post('/reviews', { snackId: id, orderId: delivered._id, rating, comment }), onSuccess: () => { setComment(''); qc.invalidateQueries({ queryKey: ['reviews', id] }); qc.invalidateQueries({ queryKey: ['snack', id] }); qc.invalidateQueries({ queryKey: ['snacks'] }); } }); if (isLoading) return <section className="section">Loading snack…</section>; const snack = snackResult?.snack; if (!snack) return <section className="section">Snack not found.</section>; const instant = snack.preparationType === 'instant'; return <section className="section detail"><Link className="back-link" to="/menu">← Back to all snacks</Link><div className="detail-top"><div className="detail-image">{snack.imageUrl ? <img src={snack.imageUrl} alt={snack.name}/> : snack.name[0]}</div><div><p className="category">{instant ? 'Available now · ' : ''}{snack.category}</p><h1>{snack.name}</h1><Rating snack={snack}/><p className="detail-description">{snack.description || 'Prepared fresh after we confirm your order.'}</p><div className="detail-meta"><span><Clock/> {instant ? 'Available now' : `Minimum ${snack.minimumPreparationDays} days`}</span><span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span></div><div className="detail-price"><strong>{format(snack.price)}</strong><span>{instant ? 'No advance · we will call or WhatsApp within 10–15 minutes' : `Advance to confirm: ${format(snack.advanceAmount)}`}</span></div><button className="button" onClick={() => add(snack)}><ShoppingBag size={18}/> Add to cart</button></div></div><div className="reviews"><div className="section-title"><div><p className="eyebrow">From customers</p><h2>Reviews</h2></div>{reviewResult?.summary.count ? <Rating snack={{ averageRating: reviewResult.summary.average, reviewCount: reviewResult.summary.count }}/> : null}</div>{reviewResult?.reviews.length ? <div className="review-list">{reviewResult.reviews.map(review => <article className="review" key={review._id}><div><b>{review.customerName}</b><span className="stars">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>)}</div> : <div className="empty">No reviews yet. Be the first customer to share feedback after delivery.</div>}{delivered && <form className="review-form" onSubmit={event => { event.preventDefault(); reviewMutation.mutate(); }}><h3>Share your review</h3><label>Rating<select value={rating} onChange={event => setRating(Number(event.target.value))}>{[5, 4, 3, 2, 1].map(value => <option value={value}>{value} star{value > 1 && 's'}</option>)}</select></label><label>Your review<textarea required minLength="3" value={comment} onChange={event => setComment(event.target.value)} placeholder="How was your snack?"/></label>{reviewMutation.isError && <p className="error">{reviewMutation.error.response?.data?.message || 'Could not submit review.'}</p>}<button className="button">Submit review</button></form>}</div></section> }
-function Profile() { const { user, setUser } = useAuth(); const [phone, setPhone] = useState(user?.phone || ''); const [address, setAddress] = useState({ label: 'Home', line: '', city: '', pincode: '', isDefault: true }); const [notice, setNotice] = useState(''); const saveProfile = useMutation({ mutationFn: () => api.patch('/auth/profile', { phone }), onSuccess: response => { setUser(response.data.user); setNotice('Profile saved.'); } }); const saveAddress = useMutation({ mutationFn: () => api.post('/auth/addresses', address), onSuccess: response => { setUser(response.data.user); setAddress({ label: 'Home', line: '', city: '', pincode: '', isDefault: false }); setNotice('Address saved. You can select it at checkout.'); } }); const removeAddress = useMutation({ mutationFn: id => api.delete(`/auth/addresses/${id}`), onSuccess: () => api.get('/auth/me').then(response => setUser(response.data.user)) }); if (!user) return <Navigate to="/login"/>; return <section className="section narrow"><p className="eyebrow">Your account</p><h1>My profile</h1>{notice && <p className="success-note">{notice}</p>}<div className="profile-grid"><form className="checkout" onSubmit={event => { event.preventDefault(); saveProfile.mutate(); }}><h3>Contact details</h3><label>Name<input value={user.name} disabled/></label><label>Email<input value={user.email} disabled/></label><label>Phone number<input required minLength="7" value={phone} onChange={event => setPhone(event.target.value)}/></label><button className="button full">Save profile</button></form><div className="checkout"><h3>Saved addresses</h3>{user.addresses?.length ? user.addresses.map(item => <div className="saved-address profile-address" key={item._id}><span><b>{item.label}{item.isDefault && ' (Default)'}</b><br/>{item.line}, {item.city} - {item.pincode}</span><button className="text-btn" type="button" onClick={() => removeAddress.mutate(item._id)}>Remove</button></div>) : <p className="muted">No saved address yet.</p>}</div></div><form className="checkout add-address-form" onSubmit={event => { event.preventDefault(); saveAddress.mutate(); }}><h3>Add a delivery address</h3><label>Address label<input required placeholder="Home, Work, etc." value={address.label} onChange={event => setAddress({ ...address, label: event.target.value })}/></label><label>Address line<textarea required placeholder="House/flat, street, area" value={address.line} onChange={event => setAddress({ ...address, line: event.target.value })}/></label><div className="form-grid"><label>City<input required value={address.city} onChange={event => setAddress({ ...address, city: event.target.value })}/></label><label>PIN code<input required value={address.pincode} onChange={event => setAddress({ ...address, pincode: event.target.value })}/></label></div><label className="check-row"><input type="checkbox" checked={address.isDefault} onChange={event => setAddress({ ...address, isDefault: event.target.checked })}/> Make this the default address</label><button className="button" disabled={saveAddress.isPending}>{saveAddress.isPending ? 'Saving…' : 'Save address'}</button></form></section> }
-function EnhancedHome() { const { data: snacks = [] } = useQuery({ queryKey: ['snacks'], queryFn: () => api.get('/snacks').then(r => r.data.snacks) }); const rail = snacks.filter(s => s.isPopular).slice(0, 6); return <><section className="hero"><p className="eyebrow">Freshness you can taste</p><h1>Made with care. <em>Prepared for you.</em></h1><p>Choose a favourite, share your order request, and we will personally confirm every fresh batch.</p><Link className="button" to="/menu">Explore the menu</Link></section><section className="trust-strip"><div><b>Made after you order</b><span>Fresh small-batch snacks</span></div><div><b>Personal confirmation</b><span>We call before preparation</span></div><div><b>Pickup or delivery</b><span>Choose what suits you</span></div></section><section className="section"><div className="section-title"><div><p className="eyebrow">Customer favourites</p><h2>Popular right now</h2></div><Link className="text-btn" to="/menu">See all snacks →</Link></div>{rail.length ? <PopularRail snacks={rail}/> : <div className="empty">New snacks are arriving soon.</div>}</section><section className="section how"><p className="eyebrow">How it works</p><h2>Simple ordering, genuinely personal service.</h2><div className="how-grid"><div><b>1</b><h3>Choose snacks</h3><p>See price, preparation time, and availability.</p></div><div><b>2</b><h3>Send request</h3><p>Pick delivery or pickup and share your number.</p></div><div><b>3</b><h3>We confirm</h3><p>We call you directly to confirm every detail.</p></div></div></section></> }
-function EnhancedCheckout() { const { user } = useAuth(); const { items, clear } = useCart(); const nav = useNavigate(); const [type, setType] = useState('pickup'); const [phone, setPhone] = useState(user?.phone || ''); const [addressId, setAddressId] = useState(user?.addresses?.find(address => address.isDefault)?._id || ''); const [error, setError] = useState(''); useEffect(() => { if (type === 'delivery' && user && !user.addresses?.length) nav('/profile?return=checkout'); }, [type, user, nav]); const order = useMutation({ mutationFn: () => { const address = user.addresses?.find(item => item._id === addressId); if (type === 'delivery' && !address) throw new Error('Please select a delivery address.'); return api.post('/orders', { phone, fulfilment: type, deliveryAddress: address ? `${address.label}: ${address.line}, ${address.city} - ${address.pincode}` : '', items: items.map(item => ({ snackId: item._id, quantity: item.quantity })) }); }, onSuccess: () => { clear(); nav('/orders'); }, onError: err => setError(err.response?.data?.message || err.message || 'Could not place this order.') }); if (!user) return <Navigate to="/login"/>; if (!items.length) return <Navigate to="/cart"/>; return <section className="section narrow"><p className="eyebrow">One final step</p><h1>Send order request</h1><p className="muted">We will call you personally to confirm the order and payment details.</p><form className="checkout" onSubmit={event => { event.preventDefault(); order.mutate(); }}><label>Phone number<input required minLength="7" value={phone} onChange={event => setPhone(event.target.value)}/></label><label>How would you like to receive your order?<select value={type} onChange={event => setType(event.target.value)}><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>{type === 'delivery' && <div className="address-picker"><b>Select one delivery address</b>{user.addresses.map(address => <label className="saved-address" key={address._id}><input type="radio" name="address" required checked={addressId === address._id} onChange={() => setAddressId(address._id)}/><span><b>{address.label}</b><br/>{address.line}, {address.city} - {address.pincode}</span></label>)}<Link className="text-btn" to="/profile?return=checkout">+ Add another address</Link></div>}<div className="callout"><Phone size={20}/><div><b>We’ll call to confirm</b><p>We will verify the order, preparation time, and advance payment if needed.</p></div></div>{error && <p className="error">{error}</p>}<button className="button full" disabled={order.isPending}>{order.isPending ? 'Sending request…' : 'Send order request'}</button></form></section> }
-function EnhancedOrderDesk() { const { user } = useAuth(); const [search, setSearch] = useState(''); const [kind, setKind] = useState(''); const [status, setStatus] = useState(''); const [fulfilment, setFulfilment] = useState(''); const { data = [], isLoading } = useQuery({ queryKey: ['admin-orders', search, kind, status, fulfilment], queryFn: () => api.get('/orders/admin', { params: { search, kind, status, fulfilment } }).then(r => r.data.orders), enabled: user?.role === 'admin' }); if (user?.role !== 'admin') return <Navigate to="/"/>; return <section className="section"><div className="section-title"><div><p className="eyebrow">Customer follow-up</p><h1>Order Desk</h1></div><p className="muted">Find, contact, and confirm orders quickly.</p></div><InstantSettings/><div className="filters order-filters"><label><Search size={17}/><input placeholder="Order ID, customer or phone" value={search} onChange={e => setSearch(e.target.value)}/></label><label><Filter size={17}/><select value={kind} onChange={e => setKind(e.target.value)}><option value="">All types</option><option value="instant">Instant</option><option value="made_to_order">Made to order</option></select></label><label><select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{Object.entries(statusLabels).map(([v,l]) => <option value={v}>{l}</option>)}</select></label><label><select value={fulfilment} onChange={e => setFulfilment(e.target.value)}><option value="">Pickup + delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label></div>{isLoading ? <p>Loading orders…</p> : <div className="order-list">{data.map(order => <OrderCard key={order._id} admin order={order} onStatus={() => {}}/>)}{!data.length && <div className="empty">No matching orders.</div>}</div>}<SimpleStock/></section> }
-function SimpleStock() { const { user } = useAuth(); const qc = useQueryClient(); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks), enabled: user?.role === 'admin' }); const save = useMutation({ mutationFn: ({ id, availableQuantity }) => api.patch(`/snacks/${id}`, { availableQuantity }), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-snacks'] }) }); return <div className="inventory"><h2>Stock limits</h2><p className="muted">Available quantity is reduced when you confirm an order.</p>{snacks.map(s => <div className="inventory-row" key={s._id}><span><b>{s.name}</b><small>{s.availableQuantity} available</small></span><input type="number" min="0" defaultValue={s.availableQuantity} onBlur={e => save.mutate({ id: s._id, availableQuantity: Number(e.target.value) })}/></div>)}</div> }
-function EnhancedMenuManager() { const { user } = useAuth(); const qc = useQueryClient(); const empty = { name: '', description: '', category: 'Snacks', price: '', advanceAmount: '', minimumPreparationDays: '1', preparationType: 'made_to_order', availableQuantity: 20, pickupAvailable: true, deliveryAvailable: false, isPopular: false, imageUrls: [] }; const [form, setForm] = useState(empty); const [files, setFiles] = useState([]); const [message, setMessage] = useState(''); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks), enabled: user?.role === 'admin' }); const upload = useMutation({ mutationFn: () => { const body = new FormData(); files.forEach(file => body.append('images', file)); return api.post('/uploads/image', body); }, onSuccess: r => { setForm(current => ({ ...current, imageUrls: [...current.imageUrls, ...r.data.imageUrls].slice(0, 6) })); setFiles([]); setMessage('Images uploaded and attached to this snack.'); }, onError: e => setMessage(e.response?.data?.message || 'Image upload failed.') }); const save = useMutation({ mutationFn: values => api.post('/snacks', { ...values, price: Number(values.price), advanceAmount: values.preparationType === 'instant' ? 0 : Number(values.advanceAmount), minimumPreparationDays: values.preparationType === 'instant' ? 0 : Number(values.minimumPreparationDays), imageUrl: values.imageUrls[0] || '' }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); setForm(empty); setMessage('Snack added to the menu.'); }, onError: e => setMessage(e.response?.data?.message || 'Could not add snack.') }); if (user?.role !== 'admin') return <Navigate to="/"/>; const instant = form.preparationType === 'instant'; return <section className="section admin-manager"><div className="section-title"><div><p className="eyebrow">Your catalogue</p><h1>Menu Manager</h1></div><p className="muted">Create snacks, set stock, and upload photos in one place.</p></div><div className="menu-manager-grid"><form className="snack-editor" onSubmit={e => { e.preventDefault(); save.mutate(form); }}><div className="image-editor"><div className="image-preview-grid">{form.imageUrls.length ? form.imageUrls.map((url, i) => <img src={url} alt="Snack preview" key={url}/>) : <div className="image-empty">Add snack photos</div>}</div><input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => setFiles([...e.target.files].slice(0, 6 - form.imageUrls.length))}/><button type="button" className="button small" disabled={!files.length || upload.isPending} onClick={() => upload.mutate()}>{upload.isPending ? 'Uploading…' : 'Upload selected images'}</button><label>Or paste image URL<input placeholder="https://..." onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (e.target.value) { setForm({ ...form, imageUrls: [...form.imageUrls, e.target.value].slice(0, 6) }); e.target.value = ''; } } }}/></label></div><label>Snack name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Description<textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}/></label><div className="editor-grid"><label>Category<input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}/></label><label>Price (₹)<input required type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}/></label><label>Stock available<input required type="number" min="0" value={form.availableQuantity} onChange={e => setForm({ ...form, availableQuantity: Number(e.target.value) })}/></label><label>Preparation<select value={form.preparationType} onChange={e => setForm({ ...form, preparationType: e.target.value })}><option value="made_to_order">Made to order</option><option value="instant">Available now</option></select></label>{!instant && <><label>Advance (₹)<input required type="number" min="0" value={form.advanceAmount} onChange={e => setForm({ ...form, advanceAmount: e.target.value })}/></label><label>Preparation days<input required type="number" min="0" value={form.minimumPreparationDays} onChange={e => setForm({ ...form, minimumPreparationDays: e.target.value })}/></label></>}</div><div className="checks"><label><input type="checkbox" checked={form.pickupAvailable} onChange={e => setForm({ ...form, pickupAvailable: e.target.checked })}/> Pickup</label><label><input type="checkbox" checked={form.deliveryAvailable} onChange={e => setForm({ ...form, deliveryAvailable: e.target.checked })}/> Delivery</label><label><input type="checkbox" checked={form.isPopular} onChange={e => setForm({ ...form, isPopular: e.target.checked })}/> Popular item</label></div><button className="button full">{save.isPending ? 'Saving…' : 'Add snack'}</button>{message && <p className={message.includes('failed') || message.includes('Could') ? 'error' : 'success-note'}>{message}</p>}</form><div className="manager-list"><h2>Current snacks</h2>{snacks.map(snack => <article className="manager-snack" key={snack._id}><img src={snack.imageUrl || snack.imageUrls?.[0] || ''} alt=""/><div><b>{snack.name}</b><p>{format(snack.price)} · Stock {snack.availableQuantity}</p><small>{snack.preparationType === 'instant' ? 'Available now' : `${snack.minimumPreparationDays} days preparation`}</small></div></article>)}</div></div></section> }
-function AdminFriendlyOrderCard({ order, admin = false, onStatus }) { const [status, setStatus] = useState(order.status); const whatsapp = `https://wa.me/${order.customerPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${order.customerName}, this is regarding order #${order._id.slice(-6).toUpperCase()}.`)}`; return <article className="order-card friendly-order"><div className="order-top"><div><p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p><h3>{statusLabels[status]}</h3><p className="muted">{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })} · Ready from {new Date(order.expectedReadyDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p></div><span className="status">{statusLabels[status]}</span></div>{admin && <div className="customer-contact"><div><b>{order.customerName || 'Customer name unavailable'}</b><span>{order.customerPhone || 'No phone number'}</span></div><div><span>{order.customerEmail}</span><span>{order.fulfilment === 'delivery' ? order.deliveryAddress : 'Pickup order'}</span></div></div>}<p className="order-items">{order.items.map(item => `${item.name} × ${item.quantity}`).join(', ')}</p><div className="order-bottom"><span>{order.fulfilment === 'pickup' ? 'Pickup' : <><MapPin size={15}/> Delivery</>} · Total {format(order.totalAmount)} · {order.advanceRequired ? `Advance ${format(order.advanceRequired)}` : 'No advance'}</span>{admin && <div className="admin-actions"><a className="whatsapp" href={whatsapp} target="_blank" rel="noreferrer"><MessageCircle size={17}/> WhatsApp</a><a className="call" href={`tel:${order.customerPhone}`}><Phone size={16}/> Call</a><select value={status} onChange={event => { setStatus(event.target.value); onStatus?.(order._id, event.target.value); }}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>}</div></article> }
-function ResponsiveProductDetail() { const { id } = useParams(); const { add } = useCart(); const [active, setActive] = useState(0); const { data, isLoading } = useQuery({ queryKey: ['snack', id], queryFn: () => api.get(`/snacks/${id}`).then(r => r.data.snack) }); if (isLoading) return <section className="section">Loading snack…</section>; if (!data) return <section className="section">Snack not found.</section>; const images = data.imageUrls?.length ? data.imageUrls : data.imageUrl ? [data.imageUrl] : []; return <section className="section product-page"><Link className="back-link" to="/menu">← Back to snacks</Link><div className="product-layout"><div className="product-gallery"><div className="main-product-image">{images.length ? <img src={images[active]} alt={data.name}/> : <span>{data.name[0]}</span>}</div>{images.length > 1 && <div className="product-thumbnails">{images.map((url, index) => <button type="button" className={index === active ? 'active' : ''} onClick={() => setActive(index)}><img src={url} alt={`${data.name} view ${index + 1}`}/></button>)}</div>}</div><div className="product-copy"><p className="category">{data.category}</p><h1>{data.name}</h1><Rating snack={data}/><p>{data.description || 'Prepared with care after we confirm your order.'}</p><div className="product-facts"><span><Clock size={17}/> {data.preparationType === 'instant' ? 'Available now' : `Minimum ${data.minimumPreparationDays} days`}</span><span>{data.pickupAvailable && 'Pickup'}{data.pickupAvailable && data.deliveryAvailable && ' · '}{data.deliveryAvailable && 'Delivery'}</span></div><strong className="product-price">{format(data.price)}</strong><p className="advance-copy">{data.preparationType === 'instant' ? 'No advance · we will contact you in 10–15 minutes' : `Advance to confirm: ${format(data.advanceAmount)}`}</p><button className="button" onClick={() => add(data)}><ShoppingBag size={18}/> Add to cart</button></div></div></section> }
-OrderCard = AdminFriendlyOrderCard;
-SnackDetail = ResponsiveProductDetail;
-function UnitSnackCard({ snack }) { const { add } = useCart(); const unit = snack.unit === 'kg' ? 'kg' : snack.unit === 'litre' ? 'litre' : 'piece'; return <article className="card"><Link to={`/snack/${snack._id}`}><div className="image">{snack.imageUrl ? <img src={snack.imageUrl} alt={snack.name}/> : <span>{snack.name[0]}</span>}</div></Link><div className="card-body"><p className="category">{snack.category}</p><Link to={`/snack/${snack._id}`}><h3>{snack.name}</h3></Link><Rating snack={snack}/><div className="prices"><strong>{format(snack.price)} <small>/ {unit}</small></strong><span>{snack.preparationType === 'instant' ? 'Available now' : `Advance ${format(snack.advanceAmount)}`}</span></div><button className="button small" onClick={() => add(snack)}>Add to cart</button></div></article> }
-function UnitProductDetail() { const { id } = useParams(); const { add } = useCart(); const [active, setActive] = useState(0); const { data, isLoading } = useQuery({ queryKey: ['snack', id], queryFn: () => api.get(`/snacks/${id}`).then(r => r.data.snack) }); if (isLoading) return <section className="section">Loading snack…</section>; if (!data) return <section className="section">Snack not found.</section>; const images = data.imageUrls?.length ? data.imageUrls : data.imageUrl ? [data.imageUrl] : []; const unit = data.unit === 'kg' ? 'kg' : data.unit === 'litre' ? 'litre' : 'piece'; return <section className="section product-page"><Link className="back-link" to="/menu">← Back to snacks</Link><div className="product-layout"><div className="product-gallery"><div className="main-product-image">{images.length ? <img src={images[active]} alt={data.name}/> : data.name[0]}</div>{images.length > 1 && <div className="product-thumbnails">{images.map((url, index) => <button className={active === index ? 'active' : ''} onClick={() => setActive(index)}><img src={url} alt=""/></button>)}</div>}</div><div className="product-copy"><p className="category">{data.category}</p><h1>{data.name}</h1><p>{data.description}</p><div className="product-facts"><span><Clock size={17}/> {data.preparationType === 'instant' ? 'Available now' : `Minimum ${data.minimumPreparationDays} days`}</span></div><strong className="product-price">{format(data.price)} <small>per {unit}</small></strong><p className="advance-copy">{data.preparationType === 'instant' ? 'No advance · we will call within 10–15 minutes' : `Advance to confirm: ${format(data.advanceAmount)}`}</p><button className="button" onClick={() => add(data)}>Add to cart</button></div></div></section> }
-SnackCard = UnitSnackCard;
-SnackDetail = UnitProductDetail;
-function UnitSimpleStock() { const { user } = useAuth(); const qc = useQueryClient(); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks), enabled: user?.role === 'admin' }); const update = useMutation({ mutationFn: values => api.patch(`/snacks/${values.id}`, values), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); } }); return <div className="inventory"><h2>Stock and price unit</h2><p className="muted">Set price as per piece, kg, or litre. Stock reduces when you confirm an order.</p>{snacks.map(snack => <div className="inventory-row" key={snack._id}><span><b>{snack.name}</b><small>{snack.availableQuantity} available</small></span><select defaultValue={snack.unit || 'piece'} onChange={e => update.mutate({ id: snack._id, unit: e.target.value })}><option value="piece">Per piece</option><option value="kg">Per kg</option><option value="litre">Per litre</option></select><input type="number" min="0" defaultValue={snack.availableQuantity} onBlur={e => update.mutate({ id: snack._id, availableQuantity: Number(e.target.value) })}/></div>)}</div> }
-SimpleStock = UnitSimpleStock;
-function StructuredAdminCard({ order, admin = false, onStatus }) { const [status, setStatus] = useState(order.status); const text = `Hello ${order.customerName},\n\n*Order #${order._id.slice(-6).toUpperCase()}*\n\n*Items*\n${order.items.map(i => `• ${i.name} × ${i.quantity}`).join('\n')}\n\n*Total:* ${format(order.totalAmount)}\n*Advance to confirm:* ${format(order.advanceRequired)}\n*Fulfilment:* ${order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}\n\nWe will call you to confirm the order.`; const whatsapp = `https://wa.me/${order.customerPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`; return <article className="order-card friendly-order"><div className="order-top"><div><p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p><h3>{statusLabels[status]}</h3><p className="muted">{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p></div><span className="status">{statusLabels[status]}</span></div>{admin && <div className="customer-contact"><div><b>{order.customerName}</b><span>{order.customerPhone}</span></div><div><span>{order.customerEmail}</span><span>{order.fulfilment === 'delivery' ? order.deliveryAddress : 'Pickup order'}</span></div></div>}<p className="order-items">{order.items.map(i => `${i.name} × ${i.quantity}`).join(', ')}</p><div className="order-bottom"><span>{order.fulfilment} · Total {format(order.totalAmount)} · Advance {format(order.advanceRequired)}</span>{admin && <div className="admin-actions"><a className="whatsapp" href={whatsapp} target="_blank" rel="noreferrer"><MessageCircle size={17}/> WhatsApp</a><a className="call" href={`tel:${order.customerPhone}`}><Phone size={16}/> Call</a><select value={status} onChange={e => { setStatus(e.target.value); onStatus?.(order._id, e.target.value); }}>{Object.entries(statusLabels).map(([v,l]) => <option value={v}>{l}</option>)}</select></div>}</div></article> }
-function StockOnlyPanel() { const { user } = useAuth(); const qc = useQueryClient(); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks), enabled: user?.role === 'admin' }); const update = useMutation({ mutationFn: v => api.patch(`/snacks/${v.id}`, { availableQuantity: v.availableQuantity }), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-snacks'] }) }); return <div className="inventory"><h2>Stock limits</h2><p className="muted">Stock is reduced only after you confirm an order.</p>{snacks.map(s => <div className="inventory-row" key={s._id}><span><b>{s.name}</b><small>{s.availableQuantity} available</small></span><input type="number" min="0" defaultValue={s.availableQuantity} onBlur={e => update.mutate({ id: s._id, availableQuantity: Number(e.target.value) })}/></div>)}</div> }
-function CleanMenuManager() { const { user } = useAuth(); const qc = useQueryClient(); const base = { name: '', description: '', category: 'Snacks', price: '', unit: 'piece', advanceAmount: '', minimumPreparationDays: '1', preparationType: 'made_to_order', availableQuantity: 20, pickupAvailable: true, deliveryAvailable: false, isPopular: false, imageUrls: [] }; const [form, setForm] = useState(base); const [editing, setEditing] = useState(null); const { data: snacks = [] } = useQuery({ queryKey: ['admin-snacks'], queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks), enabled: user?.role === 'admin' }); const save = useMutation({ mutationFn: v => editing ? api.patch(`/snacks/${editing}`, v) : api.post('/snacks', v), onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-snacks'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); setEditing(null); setForm(base); } }); if (user?.role !== 'admin') return <Navigate to="/"/>; return <section className="section admin-manager"><div className="section-title"><div><p className="eyebrow">Your catalogue</p><h1>Menu Manager</h1></div></div><div className="menu-manager-grid"><form className="snack-editor" onSubmit={e => { e.preventDefault(); save.mutate({ ...form, price: Number(form.price), advanceAmount: Number(form.advanceAmount || 0), minimumPreparationDays: Number(form.minimumPreparationDays || 0), imageUrl: form.imageUrls[0] || '' }); }}><h2>{editing ? 'Edit snack' : 'Add snack'}</h2><label>Name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Description<textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}/></label><div className="editor-grid"><label>Category<input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}/></label><label>Price (₹)<input required type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}/></label><label>Price unit<select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}><option value="piece">Per piece</option><option value="kg">Per kg</option><option value="litre">Per litre</option></select></label><label>Stock<input type="number" value={form.availableQuantity} onChange={e => setForm({ ...form, availableQuantity: Number(e.target.value) })}/></label></div><label>Image URLs (one per line)<textarea value={form.imageUrls.join('\n')} onChange={e => setForm({ ...form, imageUrls: e.target.value.split('\n').filter(Boolean) })}/></label><button className="button full">{editing ? 'Save snack changes' : 'Add snack'}</button>{editing && <button type="button" className="text-btn" onClick={() => { setEditing(null); setForm(base); }}>Cancel edit</button>}</form><div className="manager-list"><h2>Current snacks</h2>{snacks.map(s => <article className="manager-snack" key={s._id}><img src={s.imageUrl || ''} alt=""/><div><b>{s.name}</b><p>{format(s.price)} / {s.unit || 'piece'} · Stock {s.availableQuantity}</p><button className="text-btn" onClick={() => { setEditing(s._id); setForm({ ...base, ...s, imageUrls: s.imageUrls?.length ? s.imageUrls : s.imageUrl ? [s.imageUrl] : [] }); }}>Edit snack</button></div></article>)}</div></div></section> }
-function ReviewedProduct() { const { id } = useParams(); const { add } = useCart(); const [active,setActive] = useState(0); const { data: snack } = useQuery({ queryKey:['snack',id], queryFn:()=>api.get(`/snacks/${id}`).then(r=>r.data.snack) }); const { data: reviewData } = useQuery({ queryKey:['reviews',id], queryFn:()=>api.get(`/reviews/snack/${id}`).then(r=>r.data) }); if (!snack) return <section className="section">Loading snack…</section>; const images=snack.imageUrls?.length?snack.imageUrls:snack.imageUrl?[snack.imageUrl]:[]; return <section className="section product-page"><Link className="back-link" to="/menu">← Back to snacks</Link><div className="product-layout"><div className="product-gallery"><div className="main-product-image">{images.length?<img src={images[active]} alt={snack.name}/>:snack.name[0]}</div><div className="product-thumbnails">{images.map((u,i)=><button className={i===active?'active':''} onClick={()=>setActive(i)}><img src={u} alt=""/></button>)}</div></div><div className="product-copy"><p className="category">{snack.category}</p><h1>{snack.name}</h1><p>{snack.description}</p><strong className="product-price">{format(snack.price)} <small>per {snack.unit||'piece'}</small></strong><button className="button" onClick={()=>add(snack)}>Add to cart</button></div></div><div className="reviews"><h2>Customer reviews</h2>{reviewData?.reviews?.length?<div className="review-list">{reviewData.reviews.map(r=><article className="review"><b>{r.customerName}</b><span className="stars">{'★'.repeat(r.rating)}</span><p>{r.comment}</p></article>)}</div>:<div className="empty">No reviews yet.</div>}</div></section> }
-SimpleStock = StockOnlyPanel;
-EnhancedMenuManager = CleanMenuManager;
-SnackDetail = ReviewedProduct;
-function DeliveredReview({ order }) { const qc = useQueryClient(); const [open, setOpen] = useState(false); const [snackId, setSnackId] = useState(order.items[0]?.snack); const [rating, setRating] = useState(5); const [comment, setComment] = useState(''); const send = useMutation({ mutationFn: () => api.post('/reviews', { orderId: order._id, snackId, rating, comment }), onSuccess: () => { setComment(''); setOpen(false); qc.invalidateQueries({ queryKey: ['reviews'] }); qc.invalidateQueries({ queryKey: ['snacks'] }); } }); return <div className="review-action">{!open ? <button className="button small" onClick={() => setOpen(true)}>Rate this order</button> : <form onSubmit={e => { e.preventDefault(); send.mutate(); }}><select value={snackId} onChange={e => setSnackId(e.target.value)}>{order.items.map(item => <option value={item.snack}>{item.name}</option>)}</select><select value={rating} onChange={e => setRating(Number(e.target.value))}>{[5,4,3,2,1].map(value => <option value={value}>{value} stars</option>)}</select><textarea required minLength="3" placeholder="Share your experience" value={comment} onChange={e => setComment(e.target.value)}/>{send.isError && <p className="error">{send.error.response?.data?.message || 'Could not submit review.'}</p>}<div><button className="button small">Submit review</button><button type="button" className="text-btn" onClick={() => setOpen(false)}>Cancel</button></div></form>}</div> }
-function CustomerOrderCard({ order, admin = false, onStatus }) { if (admin) return <StructuredAdminCard order={order} admin onStatus={onStatus}/>; return <article className="order-card"><div className="order-top"><div><p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p><h3>{statusLabels[order.status]}</h3><p className="muted">{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p></div><span className="status">{statusLabels[order.status]}</span></div><p className="order-items">{order.items.map(item => `${item.name} × ${item.quantity}`).join(', ')}</p><div className="order-bottom"><span>{order.fulfilment} · Total {format(order.totalAmount)} · Advance {format(order.advanceRequired)}</span>{order.status === 'delivered' && <DeliveredReview order={order}/>}</div></article> }
-function PersistentOrderCard({ order, admin = false, onStatus }) { const [status, setStatus] = useState(order.status); const qc = useQueryClient(); const update = useMutation({ mutationFn: next => api.patch(`/orders/admin/${order._id}/status`, { status: next }), onSuccess: result => { setStatus(result.data.order.status); qc.invalidateQueries({ queryKey: ['admin-orders'] }); qc.invalidateQueries({ queryKey: ['orders'] }); qc.invalidateQueries({ queryKey: ['admin-snacks'] }); } }); if (!admin) return <CustomerOrderCard order={order}/>; const text = `Hello ${order.customerName},\n\n*Order #${order._id.slice(-6).toUpperCase()}*\n${order.items.map(i => `• ${i.name} × ${i.quantity}`).join('\n')}\n\n*Total:* ${format(order.totalAmount)}\n*Advance:* ${format(order.advanceRequired)}`; return <article className="order-card friendly-order"><div className="order-top"><div><p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p><h3>{statusLabels[status]}</h3></div><span className="status">{statusLabels[status]}</span></div><div className="customer-contact"><div><b>{order.customerName}</b><span>{order.customerPhone}</span></div><div><span>{order.customerEmail}</span><span>{order.fulfilment === 'delivery' ? order.deliveryAddress : 'Pickup order'}</span></div></div><p className="order-items">{order.items.map(i => `${i.name} × ${i.quantity}`).join(', ')}</p><div className="order-bottom"><span>{order.fulfilment} · Total {format(order.totalAmount)} · Advance {format(order.advanceRequired)}</span><div className="admin-actions"><a className="whatsapp" href={`https://wa.me/${order.customerPhone?.replace(/\D/g,'')}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer"><MessageCircle size={17}/> WhatsApp</a><a className="call" href={`tel:${order.customerPhone}`}><Phone size={16}/> Call</a><select value={status} disabled={update.isPending} onChange={e => update.mutate(e.target.value)}>{Object.entries(statusLabels).map(([v,l]) => <option value={v}>{l}</option>)}</select></div></div>{update.isError && <p className="error">Could not save status. Try again.</p>}</article> }
-OrderCard = PersistentOrderCard;
-createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient()}><BrowserRouter><AppShell/></BrowserRouter></QueryClientProvider>);
+const format = number => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(number || 0);
+
+const statusLabels = {
+  request_received: 'Order request received',
+  contacting_customer: 'We are contacting you',
+  awaiting_confirmation: 'Awaiting confirmation',
+  confirmed: 'Confirmed',
+  preparing: 'Preparing',
+  ready_for_pickup: 'Ready for pickup',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled'
+};
+
+const ITEMS_PER_PAGE = 6;
+
+/* ------------------------------------------------------------------ */
+/* Add To Cart Confirmation Modal Component                          */
+/* ------------------------------------------------------------------ */
+function AddToCartModal({ snack, onClose, onGoToCart }) {
+  if (!snack) return null;
+  const imgUrl = snack.imageUrl || snack.imageUrls?.[0];
+  const unit = snack.unit === 'kg' ? 'kg' : snack.unit === 'litre' ? 'litre' : 'piece';
+
+  return (
+    <div className="add-cart-overlay" onClick={onClose}>
+      <div className="add-cart-modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Close modal">
+          <X size={18} />
+        </button>
+        <div className="add-cart-header">
+          <CheckCircle size={24} />
+          <span>Added to Your Cart!</span>
+        </div>
+
+        <div className="add-cart-snack-info">
+          {imgUrl ? <img src={imgUrl} alt={snack.name} /> : <div style={{ width: 64, height: 64, background: '#dce8d5', borderRadius: 10, display: 'grid', placeItems: 'center', fontWeight: 'bold', fontSize: 24, color: '#276044' }}>{snack.name[0]}</div>}
+          <div>
+            <h4>{snack.name}</h4>
+            <p><strong>{format(snack.price)}</strong> / {unit}</p>
+            <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Full payment on confirmation/delivery</span>
+          </div>
+        </div>
+
+        <div className="add-cart-actions">
+          <button type="button" className="button" onClick={onGoToCart} style={{ gap: 6 }}>
+            <ShoppingCart size={16} /> View Cart & Checkout
+          </button>
+          <button type="button" className="button" style={{ background: '#ffffff', color: '#1e293b', border: '1px solid #cbd5e1' }} onClick={onClose}>
+            Continue Shopping
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Order Success Popup Modal Component                                */
+/* ------------------------------------------------------------------ */
+function OrderSuccessModal({ open, order, onClose, onViewOrders }) {
+  if (!open) return null;
+
+  return (
+    <div className="order-success-overlay">
+      <div className="order-success-modal" onClick={e => e.stopPropagation()}>
+        <div className="success-icon-wrap">
+          <Check size={36} strokeWidth={3} />
+        </div>
+        <div>
+          <h2>Thank You for Ordering!</h2>
+          <p style={{ marginTop: 6, fontWeight: 500, color: '#15803d' }}>Reddy's Home Foods has received your order request.</p>
+        </div>
+
+        <div className="call-badge-notice">
+          <Phone size={24} style={{ flexShrink: 0 }} />
+          <div>
+            <strong>We will contact you in 10–15 minutes!</strong>
+            <div style={{ fontSize: '12px', marginTop: 2 }}>Our team will call or WhatsApp your number to confirm your order items and preparation time.</div>
+          </div>
+        </div>
+
+        {order && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px', textAlign: 'left', fontSize: '13px' }}>
+            <div><strong>Order ID:</strong> #{order._id.slice(-6).toUpperCase()}</div>
+            <div><strong>Items:</strong> {order.items.map(i => `${i.name} × ${i.quantity}`).join(', ')}</div>
+            <div><strong>Total Amount:</strong> {format(order.totalAmount)}</div>
+            <div><strong>Fulfilment:</strong> {order.fulfilment === 'delivery' ? 'Home Delivery' : 'Store Pickup'}</div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button type="button" className="button" onClick={onViewOrders} style={{ gap: 6 }}>
+            <FileText size={16} /> View My Orders
+          </button>
+          <button type="button" className="button" style={{ background: '#ffffff', color: '#1e293b', border: '1px solid #cbd5e1', gap: 6 }} onClick={onClose}>
+            <Home size={16} /> Back to Home
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Customer Care Modal Component                                      */
+/* ------------------------------------------------------------------ */
+function CustomerCareModal({ open, onClose }) {
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data.settings)
+  });
+  if (!open) return null;
+  const phone = settingsData?.storePhone || '+91 98765 43210';
+  const email = settingsData?.storeEmail || 'support@reddyshomefoods.com';
+  const address = settingsData?.storeAddress || "Reddy's Home Foods, Main Road, Gourmet Plaza, Suite 10";
+  const notice = settingsData?.customerCareNotice || "Available Mon-Sat 9 AM - 9 PM for order confirmation, custom batches & support at Reddy's Home Foods.";
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="customer-care-modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Close modal">
+          <X size={20} />
+        </button>
+        <div className="care-header">
+          <p className="eyebrow"><Headphones size={14} style={{ display: 'inline', marginRight: 4 }} /> Reddy's Home Foods Care</p>
+          <h2>Customer Support & Help</h2>
+          <p className="muted" style={{ margin: '4px 0 0' }}>{notice}</p>
+        </div>
+
+        <div className="care-cards">
+          <a href={`tel:${phone.replace(/\s+/g, '')}`} className="care-card">
+            <Phone size={20} />
+            <strong>Call Us Directly</strong>
+            <span>{phone}</span>
+          </a>
+          <a href={`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent("Hello Reddy's Home Foods, I have an inquiry about my order.")}`} target="_blank" rel="noreferrer" className="care-card">
+            <MessageCircle size={20} />
+            <strong>WhatsApp Support</strong>
+            <span>Direct WhatsApp chat & confirmation</span>
+          </a>
+          <a href={`mailto:${email}`} className="care-card">
+            <Mail size={20} />
+            <strong>Email Support</strong>
+            <span>{email}</span>
+          </a>
+          <div className="care-card" style={{ cursor: 'default' }}>
+            <Clock size={20} />
+            <strong>Instant Order Hours</strong>
+            <span>{settingsData?.instantStartTime || '09:00'} - {settingsData?.instantEndTime || '20:00'} IST</span>
+          </div>
+        </div>
+
+        <div className="pickup-box">
+          <MapPin size={22} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <h4>Store Pickup Location</h4>
+            <p>{address}</p>
+          </div>
+        </div>
+
+        <div className="faq-section">
+          <h3>How Ordering & Confirmation Works</h3>
+          <details className="faq-item" open>
+            <summary>What happens after I place an order request?</summary>
+            <p>1. Your request is instantly sent to Reddy's Home Foods team via Telegram & Email.<br />2. Our team calls or WhatsApp messages you within 10–15 minutes to confirm details.<br />3. We prepare your fresh batch for Store Pickup or Doorstep Delivery!</p>
+          </details>
+          <details className="faq-item">
+            <summary>Do I need to pay any advance?</summary>
+            <p>No! No advance payment is needed when placing your request. Full payment is confirmed over call/WhatsApp or upon delivery/pickup.</p>
+          </details>
+          <details className="faq-item">
+            <summary>Can I pick up my order from the store?</summary>
+            <p>Yes! Select 'Store Pickup' at checkout to collect your fresh batch directly from our store address above.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Header Navigation                                                 */
+/* ------------------------------------------------------------------ */
+function Header({ onOpenCare }) {
+  const { user, logout } = useAuth();
+  const { count } = useCart();
+  const [open, setOpen] = useState(false);
+  const closeMenu = () => setOpen(false);
+  const admin = user?.role === 'admin';
+
+  return (
+    <header>
+      <div className="header-inner">
+        <Link className="brand" to="/" onClick={closeMenu}>
+          Reddy's<span> Home Foods</span>
+        </Link>
+        <button className={`menu-toggle ${open ? 'is-open' : ''}`} type="button" onClick={() => setOpen(v => !v)} aria-label="Toggle menu">
+          <MenuIcon size={20} />
+        </button>
+        <nav className={`nav-links ${open ? 'open' : ''}`}>
+          <Link to="/" onClick={closeMenu}>Home</Link>
+          <Link to="/menu" onClick={closeMenu}>Browse snacks</Link>
+          {!admin && user && (
+            <>
+              <Link to="/orders" onClick={closeMenu}>My orders</Link>
+              <Link to="/profile" onClick={closeMenu}>My profile</Link>
+            </>
+          )}
+          {admin && (
+            <>
+              <Link to="/order-desk" onClick={closeMenu}>Order Desk & Settings</Link>
+              <Link to="/menu-manager" onClick={closeMenu}>Menu Manager</Link>
+            </>
+          )}
+          <button type="button" className="text-btn" onClick={() => { onOpenCare(); closeMenu(); }}>
+            <Headphones size={17} /> Customer Care
+          </button>
+          {!admin && (
+            <Link className="cart-link" to="/cart" onClick={closeMenu}>
+              <ShoppingBag size={18} /> Cart <b>{count}</b>
+            </Link>
+          )}
+          {user ? (
+            <button className="text-btn" onClick={() => { logout(); closeMenu(); }}>
+              <LogOut size={17} /> Logout
+            </button>
+          ) : (
+            <Link className="button small" to="/login" onClick={closeMenu}>Login</Link>
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer                                                            */
+/* ------------------------------------------------------------------ */
+function Footer({ onOpenCare }) {
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data.settings)
+  });
+  return (
+    <footer style={{ background: '#1c2820', color: '#e2e8f0', padding: '50px 24px 30px', marginTop: '80px', borderTop: '1px solid #2d3e32' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '32px' }}>
+        <div>
+          <h3 style={{ color: '#fff', fontSize: '24px', margin: '0 0 12px', fontFamily: "'Outfit', sans-serif" }}>Reddy's<span style={{ color: '#f59e0b' }}> Home Foods</span></h3>
+          <p style={{ color: '#94a3b8', fontSize: '14px', lineHeight: '1.6' }}>Authentic handcrafted homemade snacks prepared fresh after your request. Fast pickup & doorstep delivery.</p>
+        </div>
+        <div>
+          <h4 style={{ color: '#fff', margin: '0 0 14px', fontSize: '16px' }}>Store Pickup Location</h4>
+          <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6', display: 'flex', gap: 6 }}>
+            <MapPin size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 2 }} />
+            {settings?.storeAddress || "Reddy's Home Foods, Main Road, Gourmet Plaza, Suite 10"}
+          </p>
+        </div>
+        <div>
+          <h4 style={{ color: '#fff', margin: '0 0 14px', fontSize: '16px' }}>Need Help?</h4>
+          <p style={{ color: '#cbd5e1', fontSize: '13px', margin: '0 0 8px', display: 'flex', gap: 6 }}>
+            <Phone size={15} style={{ color: '#10b981' }} /> {settings?.storePhone || '+91 98765 43210'}
+          </p>
+          <p style={{ color: '#cbd5e1', fontSize: '13px', margin: '0 0 14px', display: 'flex', gap: 6 }}>
+            <Mail size={15} style={{ color: '#3b82f6' }} /> {settings?.storeEmail || 'support@reddyshomefoods.com'}
+          </p>
+          <button type="button" className="button small" onClick={onOpenCare} style={{ background: '#276044' }}>
+            <Headphones size={15} style={{ marginRight: 5 }} /> Open Customer Care
+          </button>
+        </div>
+      </div>
+      <div style={{ maxWidth: '1200px', margin: '40px auto 0', paddingTop: '20px', borderTop: '1px solid #2d3e32', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+        © {new Date().getFullYear()} Reddy's Home Foods. All rights reserved. Made fresh with authentic care.
+      </div>
+    </footer>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Main App Shell                                                     */
+/* ------------------------------------------------------------------ */
+function AppShell() {
+  const [user, setUser] = useState(undefined);
+  const [items, setItems] = useState(() => JSON.parse(localStorage.getItem('snack-cart') || '[]'));
+  const [addedSnackModal, setAddedSnackModal] = useState(null);
+  const [placedOrder, setPlacedOrder] = useState(null);
+  const [showCareModal, setShowCareModal] = useState(false);
+  const nav = useNavigate();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    api.get('/auth/me').then(result => setUser(result.data.user)).catch(() => setUser(null));
+  }, []);
+
+  useEffect(() => localStorage.setItem('snack-cart', JSON.stringify(items)), [items]);
+
+  const cart = useMemo(() => ({
+    items,
+    count: items.reduce((sum, item) => sum + item.quantity, 0),
+    add: snack => {
+      setItems(old => {
+        const current = old.find(item => item._id === snack._id);
+        return current ? old.map(item => item._id === snack._id ? { ...item, quantity: item.quantity + 1 } : item) : [...old, { ...snack, quantity: 1 }];
+      });
+      setAddedSnackModal(snack);
+    },
+    change: (id, quantity) => setItems(old => quantity < 1 ? old.filter(item => item._id !== id) : old.map(item => item._id === id ? { ...item, quantity } : item)),
+    clear: () => setItems([])
+  }), [items]);
+
+  return (
+    <Auth.Provider value={{ user, setUser, logout: async () => { await api.post('/auth/logout'); setUser(null); qc.clear(); nav('/'); } }}>
+      <Cart.Provider value={cart}>
+        <Header onOpenCare={() => setShowCareModal(true)} />
+        <AddToCartModal snack={addedSnackModal} onClose={() => setAddedSnackModal(null)} onGoToCart={() => { setAddedSnackModal(null); nav('/cart'); }} />
+        <OrderSuccessModal open={!!placedOrder} order={placedOrder} onClose={() => setPlacedOrder(null)} onViewOrders={() => { setPlacedOrder(null); nav('/orders'); }} />
+        <CustomerCareModal open={showCareModal} onClose={() => setShowCareModal(false)} />
+        <main style={{ minHeight: '75vh' }}>
+          <Routes>
+            <Route path="/" element={<EnhancedHome onOpenCare={() => setShowCareModal(true)} />} />
+            <Route path="/menu" element={<Menu />} />
+            <Route path="/snack/:id" element={<SnackDetail />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/cart" element={<CartPage onOpenCare={() => setShowCareModal(true)} />} />
+            <Route path="/checkout" element={<Checkout onOpenCare={() => setShowCareModal(true)} onOrderSuccess={order => setPlacedOrder(order)} />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/order-desk" element={<EnhancedOrderDesk />} />
+            <Route path="/menu-manager" element={<EnhancedMenuManager />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </main>
+        <Footer onOpenCare={() => setShowCareModal(true)} />
+      </Cart.Provider>
+    </Auth.Provider>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Snack Card Component                                               */
+/* ------------------------------------------------------------------ */
+function Rating({ snack }) {
+  return snack.reviewCount ? (
+    <span className="rating"><Star size={14} fill="currentColor" /> {snack.averageRating} <small>({snack.reviewCount})</small></span>
+  ) : (
+    <span className="no-rating">New · Fresh batch</span>
+  );
+}
+
+function SnackCard({ snack }) {
+  const { add } = useCart();
+  const instant = snack.preparationType === 'instant';
+  const unit = snack.unit === 'kg' ? 'kg' : snack.unit === 'litre' ? 'litre' : 'piece';
+  const imgUrl = snack.imageUrl || snack.imageUrls?.[0];
+  const isFav = snack.isFavorite || snack.isPopular;
+
+  return (
+    <article className="card">
+      <Link to={`/snack/${snack._id}`}>
+        <div className="image">
+          {isFav && <span className="fav-badge"><Sparkles size={12} /> Favorite</span>}
+          {imgUrl ? <img src={imgUrl} alt={snack.name} /> : <span>{snack.name.slice(0, 1)}</span>}
+          <div className={`badge ${instant ? 'instant-badge' : ''}`}>
+            <Clock size={13} />
+            {instant ? 'Available now' : `${snack.minimumPreparationDays} day${snack.minimumPreparationDays !== 1 ? 's' : ''}`}
+          </div>
+        </div>
+      </Link>
+      <div className="card-body">
+        <p className="category">{instant ? 'Available now · ' : ''}{snack.category}</p>
+        <Link to={`/snack/${snack._id}`}>
+          <h3>{snack.name}</h3>
+        </Link>
+        <Rating snack={snack} />
+        <p className="description">{snack.description || 'Handcrafted fresh with care after your order request is confirmed.'}</p>
+        <div className="prices">
+          <strong>{format(snack.price)} <small style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>/ {unit}</small></strong>
+          <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Full Price</span>
+        </div>
+        <div className="card-footer">
+          <span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span>
+          <button className="button small" onClick={() => add(snack)}>Add to cart</button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Homepage Ticker / Auto-scroll Rail for Favorite Items               */
+/* ------------------------------------------------------------------ */
+function PopularRail({ snacks }) {
+  const railRef = useRef(null);
+  const displayItems = snacks.length < 4 ? [...snacks, ...snacks, ...snacks, ...snacks] : [...snacks, ...snacks];
+
+  return (
+    <div className="hero-scroll-container">
+      <div className="ticker-wrapper" ref={railRef}>
+        {displayItems.map((snack, index) => (
+          <div className="rail-card" key={`${snack._id}-${index}`}>
+            <SnackCard snack={snack} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Enhanced Homepage                                                  */
+/* ------------------------------------------------------------------ */
+function EnhancedHome({ onOpenCare }) {
+  const { data: snacks = [] } = useQuery({
+    queryKey: ['snacks'],
+    queryFn: () => api.get('/snacks').then(r => r.data.snacks)
+  });
+
+  const favorites = snacks.filter(s => s.isFavorite || s.isPopular);
+  const railItems = favorites.length ? favorites : snacks.slice(0, 8);
+
+  return (
+    <>
+      <section className="hero">
+        <p className="eyebrow"><Sparkles size={14} style={{ display: 'inline', marginRight: 4 }} /> Reddy's Home Foods</p>
+        <h1>Authentic Homemade Snacks <em>Prepared Fresh for You.</em></h1>
+        <p>Order delicious homemade delicacies. Instant Telegram notification to admin + direct WhatsApp & Call confirmation within 10–15 minutes!</p>
+        <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+          <Link className="button" to="/menu">Explore Full Menu</Link>
+          <button type="button" className="button" style={{ background: '#ffffff', color: '#1f2937', border: '1px solid #cbd5e1' }} onClick={onOpenCare}>
+            <Headphones size={17} style={{ marginRight: 6 }} /> Customer Care
+          </button>
+        </div>
+      </section>
+
+      <section className="trust-strip">
+        <div>
+          <b>Fresh Homemade Cooking</b>
+          <span>Prepared strictly after your request</span>
+        </div>
+        <div>
+          <b>Instant Telegram & Call Confirmation</b>
+          <span>We call or WhatsApp within 10–15 mins to confirm</span>
+        </div>
+        <div>
+          <b>Store Pickup or Delivery</b>
+          <span>Pick up at gourmet store address or get doorstep delivery</span>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-title">
+          <div>
+            <p className="eyebrow">Customer Favorites (Auto-scrolling)</p>
+            <h2>Featured & Popular Snacks</h2>
+          </div>
+          <Link className="text-btn" to="/menu">See all snacks →</Link>
+        </div>
+        <p className="muted" style={{ margin: '-15px 0 20px' }}>Hover or touch cards to pause the auto-scroll ticker.</p>
+        {railItems.length ? <PopularRail snacks={railItems} /> : <div className="empty">New snacks arriving soon. Check back shortly!</div>}
+      </section>
+
+      <section className="section how">
+        <p className="eyebrow">How It Works</p>
+        <h2>4 Steps: From Request to Fresh Batch</h2>
+        <div className="how-grid">
+          <div>
+            <b>1</b>
+            <h3>Select & Send Request</h3>
+            <p>Select your favorite snacks and send your request (zero advance fee!).</p>
+          </div>
+          <div>
+            <b>2</b>
+            <h3>Instant Admin Alert</h3>
+            <p>Admin immediately receives alert via Telegram & Email.</p>
+          </div>
+          <div>
+            <b>3</b>
+            <h3>WhatsApp & Phone Call</h3>
+            <p>We call or message you within 10–15 mins to confirm details.</p>
+          </div>
+          <div>
+            <b>4</b>
+            <h3>Fresh Preparation</h3>
+            <p>We prepare your fresh batch for Pickup or Doorstep Delivery!</p>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Menu Page                                                          */
+/* ------------------------------------------------------------------ */
+function Menu() {
+  const { data: snacks = [], isLoading } = useQuery({
+    queryKey: ['snacks'],
+    queryFn: () => api.get('/snacks').then(r => r.data.snacks)
+  });
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+  const [days, setDays] = useState('all');
+
+  const categories = [...new Set(snacks.map(snack => snack.category))];
+  const filtered = snacks.filter(snack =>
+    (!search || snack.name.toLowerCase().includes(search.toLowerCase())) &&
+    (category === 'all' || snack.category === category) &&
+    (days === 'all' || (days === 'instant' ? snack.preparationType === 'instant' : days === 'quick' ? snack.preparationType !== 'instant' && snack.minimumPreparationDays <= 2 : snack.preparationType !== 'instant' && snack.minimumPreparationDays >= 3))
+  );
+
+  return (
+    <section className="section">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow">Reddy's Home Foods Catalogue</p>
+          <h1>Browse Snacks</h1>
+        </div>
+        <p className="muted">Click any item to view photos, reviews, and details.</p>
+      </div>
+
+      <div className="filters">
+        <label>
+          <Search size={17} />
+          <input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} />
+        </label>
+        <label>
+          <Filter size={17} />
+          <select value={category} onChange={e => setCategory(e.target.value)}>
+            <option value="all">All Categories</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label>
+          <Clock size={17} />
+          <select value={days} onChange={e => setDays(e.target.value)}>
+            <option value="all">Any Preparation Time</option>
+            <option value="instant">Available Now</option>
+            <option value="quick">Ready in 0–2 Days</option>
+            <option value="longer">3+ Days Preparation</option>
+          </select>
+        </label>
+      </div>
+
+      {isLoading ? (
+        <p>Loading snacks catalogue...</p>
+      ) : (
+        <>
+          <p className="results">{filtered.length} snack{filtered.length !== 1 ? 's' : ''} available</p>
+          <div className="grid">
+            {filtered.map(snack => <SnackCard key={snack._id} snack={snack} />)}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Snack Detail Page                                                  */
+/* ------------------------------------------------------------------ */
+function SnackDetail() {
+  const { id } = useParams();
+  const { user } = useAuth();
+  const { add } = useCart();
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const [activeImg, setActiveImg] = useState(0);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+
+  const { data: snackResult, isLoading } = useQuery({
+    queryKey: ['snack', id],
+    queryFn: () => api.get(`/snacks/${id}`).then(r => r.data)
+  });
+  const { data: reviewResult } = useQuery({
+    queryKey: ['reviews', id],
+    queryFn: () => api.get(`/reviews/snack/${id}`).then(r => r.data)
+  });
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => api.get('/orders/my-orders').then(r => r.data.orders),
+    enabled: !!user
+  });
+
+  const delivered = orders.find(order => order.status === 'delivered' && order.items.some(i => i.snack === id || i.snack?._id === id));
+
+  const reviewMutation = useMutation({
+    mutationFn: () => api.post('/reviews', { snackId: id, orderId: delivered._id, rating, comment }),
+    onSuccess: () => {
+      setComment('');
+      qc.invalidateQueries({ queryKey: ['reviews', id] });
+      qc.invalidateQueries({ queryKey: ['snack', id] });
+    }
+  });
+
+  if (isLoading) return <section className="section">Loading item details...</section>;
+  const snack = snackResult?.snack;
+  if (!snack) return <section className="section">Snack item not found.</section>;
+
+  const images = snack.imageUrls?.length ? snack.imageUrls : snack.imageUrl ? [snack.imageUrl] : [];
+  const instant = snack.preparationType === 'instant';
+  const unit = snack.unit === 'kg' ? 'kg' : snack.unit === 'litre' ? 'litre' : 'piece';
+
+  return (
+    <section className="section product-page">
+      <Link className="back-link" to="/menu">← Back to all snacks</Link>
+      <div className="product-layout">
+        <div className="product-gallery">
+          <div className="main-product-image">
+            {images.length ? <img src={images[activeImg]} alt={snack.name} /> : <span>{snack.name[0]}</span>}
+          </div>
+          {images.length > 1 && (
+            <div className="product-thumbnails">
+              {images.map((url, i) => (
+                <button type="button" key={url} className={i === activeImg ? 'active' : ''} onClick={() => setActiveImg(i)}>
+                  <img src={url} alt={`${snack.name} preview ${i + 1}`} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="product-copy">
+          <p className="category">{instant ? 'Available Now · ' : ''}{snack.category}</p>
+          <h1>{snack.name}</h1>
+          <Rating snack={snack} />
+          <p style={{ margin: '14px 0 20px', lineHeight: 1.7 }}>{snack.description || 'Handcrafted fresh upon order confirmation.'}</p>
+          <div className="product-facts">
+            <span><Clock size={17} /> {instant ? 'Available now' : `Minimum ${snack.minimumPreparationDays} preparation days`}</span>
+            <span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span>
+          </div>
+          <strong className="product-price">{format(snack.price)} <small style={{ fontSize: '16px', color: '#64748b' }}>per {unit}</small></strong>
+          <p style={{ color: '#16a34a', fontWeight: 600, margin: '8px 0 20px' }}>Full payment upon confirmation / delivery. Zero advance required.</p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <button className="button" onClick={() => add(snack)}>
+              <ShoppingBag size={18} style={{ marginRight: 6 }} /> Add to Cart
+            </button>
+            <button className="button" style={{ background: '#16a34a' }} onClick={() => { add(snack); nav('/cart'); }}>
+              Buy Now / Checkout
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="reviews">
+        <div className="section-title">
+          <div>
+            <p className="eyebrow">Verified Customers</p>
+            <h2>Customer Reviews</h2>
+          </div>
+          {reviewResult?.summary?.count ? <Rating snack={{ averageRating: reviewResult.summary.average, reviewCount: reviewResult.summary.count }} /> : null}
+        </div>
+
+        {reviewResult?.reviews?.length ? (
+          <div className="review-list">
+            {reviewResult.reviews.map(review => (
+              <article className="review" key={review._id}>
+                <div>
+                  <b>{review.customerName}</b>
+                  <span className="stars">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                </div>
+                <p>{review.comment}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="empty">No customer reviews for this snack yet.</div>
+        )}
+
+        {delivered && (
+          <form className="review-form" onSubmit={e => { e.preventDefault(); reviewMutation.mutate(); }}>
+            <h3>Share Your Feedback</h3>
+            <label>
+              Rating
+              <select value={rating} onChange={e => setRating(Number(e.target.value))}>
+                {[5, 4, 3, 2, 1].map(v => <option key={v} value={v}>{v} Star{v > 1 && 's'}</option>)}
+              </select>
+            </label>
+            <label>
+              Your Review
+              <textarea required minLength="3" value={comment} onChange={e => setComment(e.target.value)} placeholder="How was your snack?" />
+            </label>
+            <button className="button">Submit Review</button>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cart Page                                                          */
+/* ------------------------------------------------------------------ */
+function CartPage({ onOpenCare }) {
+  const { items, change } = useCart();
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data.settings)
+  });
+
+  return (
+    <section className="section narrow">
+      <p className="eyebrow">Your Selection</p>
+      <h1>Cart</h1>
+      {!items.length ? (
+        <div className="empty">
+          Your cart is currently empty.<br /><br />
+          <Link to="/menu" className="button small" style={{ background: '#276044', color: '#fff' }}>Browse Our Snacks</Link>
+        </div>
+      ) : (
+        <>
+          <div className="cart-list">
+            {items.map(item => (
+              <div className="cart-item" key={item._id}>
+                <div className="mini-image">
+                  {item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : item.name[0]}
+                </div>
+                <div>
+                  <h3>{item.name}</h3>
+                  <p>{format(item.price)} per {item.unit || 'piece'}</p>
+                </div>
+                <div className="quantity">
+                  <button onClick={() => change(item._id, item.quantity - 1)}><Minus size={15} /></button>
+                  <b>{item.quantity}</b>
+                  <button onClick={() => change(item._id, item.quantity + 1)}><Plus size={15} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="summary">
+            <div>
+              <span>Total Order Amount</span>
+              <strong>{format(total)}</strong>
+            </div>
+            <p className="instant-checkout" style={{ margin: '12px 0 16px' }}>
+              No advance payment required! Admin gets instant Telegram alert and will call/WhatsApp you within 10–15 minutes to confirm.
+            </p>
+            <Link className="button full" to="/checkout">Proceed to Checkout</Link>
+          </div>
+
+          <div className="pickup-info-banner">
+            <MapPin size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <h4>Store Pickup Address</h4>
+              <p>{settings?.storeAddress || "Reddy's Home Foods, Main Road, Gourmet Plaza, Suite 10"}</p>
+              <button type="button" className="text-btn" onClick={onOpenCare} style={{ fontSize: '12px', padding: 0, color: '#15803d' }}>
+                Need help? Contact Customer Care
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Checkout Page                                                      */
+/* ------------------------------------------------------------------ */
+function Checkout({ onOpenCare, onOrderSuccess }) {
+  const { user, setUser } = useAuth();
+  const { items, clear } = useCart();
+  const nav = useNavigate();
+  const [fulfilment, setFulfilment] = useState('pickup');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [addressId, setAddressId] = useState(user?.addresses?.find(a => a.isDefault)?._id || '');
+  const [error, setError] = useState('');
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data.settings)
+  });
+
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const orderMutation = useMutation({
+    mutationFn: () => {
+      let deliveryAddress = '';
+      let latitude = undefined;
+      let longitude = undefined;
+      if (fulfilment === 'delivery') {
+        const address = user?.addresses?.find(item => item._id === addressId);
+        if (!address) throw new Error('Please select a saved delivery address or add a new one in profile.');
+        deliveryAddress = `${address.label}: ${address.line}, ${address.city} - ${address.pincode}`;
+        latitude = address.latitude;
+        longitude = address.longitude;
+      }
+      return api.post('/orders', {
+        phone,
+        fulfilment,
+        deliveryAddress,
+        latitude,
+        longitude,
+        items: items.map(item => ({ snackId: item._id, quantity: item.quantity }))
+      });
+    },
+    onSuccess: response => {
+      const createdOrder = response.data.order;
+      clear();
+      onOrderSuccess(createdOrder);
+    },
+    onError: err => setError(err.response?.data?.message || err.message || 'Could not place order request.')
+  });
+
+  if (!user) return <Navigate to="/login" />;
+  if (!items.length) return <Navigate to="/cart" />;
+
+  return (
+    <section className="section narrow">
+      <p className="eyebrow">Final Step</p>
+      <h1>Send Order Request</h1>
+      <p className="muted">No advance payment required. We will call/WhatsApp you within 10–15 minutes to confirm details.</p>
+
+      <form className="checkout" onSubmit={e => { e.preventDefault(); orderMutation.mutate(); }}>
+        {error && <p className="error">{error}</p>}
+        <label>
+          Contact Phone Number
+          <input required minLength="7" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +91 9876543210" />
+        </label>
+
+        <label>
+          Fulfilment Option
+          <select value={fulfilment} onChange={e => setFulfilment(e.target.value)}>
+            <option value="pickup">Store Pickup</option>
+            <option value="delivery">Home Delivery</option>
+          </select>
+        </label>
+
+        {fulfilment === 'pickup' && (
+          <div className="pickup-info-banner">
+            <MapPin size={22} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <h4>Store Pickup Address</h4>
+              <p><strong>{settings?.storeAddress || "Reddy's Home Foods, Main Road, Gourmet Plaza, Suite 10"}</strong></p>
+              <p style={{ fontSize: '12px', color: '#15803d', margin: '4px 0 0' }}>Store Phone: {settings?.storePhone || '+91 98765 43210'}</p>
+            </div>
+          </div>
+        )}
+
+        {fulfilment === 'delivery' && (
+          <div className="address-picker">
+            <b>Select Delivery Address</b>
+            {user.addresses?.length ? (
+              user.addresses.map(a => (
+                <label className="saved-address" key={a._id}>
+                  <input type="radio" name="address" required checked={addressId === a._id} onChange={() => setAddressId(a._id)} />
+                  <span>
+                    <b>{a.label}{a.isDefault ? ' (Default)' : ''}</b><br />
+                    {a.line}, {a.city} - {a.pincode}
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="muted">No saved delivery address found.</p>
+            )}
+            <Link className="text-btn" to="/profile?return=checkout">+ Add standard address in profile</Link>
+          </div>
+        )}
+
+        <div className="callout">
+          <Phone size={20} />
+          <div>
+            <b>We will call to confirm within 10–15 mins</b>
+            <p>Total amount: <strong>{format(total)}</strong>. Full payment confirmed over WhatsApp/Call or upon pickup/delivery.</p>
+          </div>
+        </div>
+
+        <button className="button full" disabled={orderMutation.isPending}>
+          {orderMutation.isPending ? 'Sending request...' : 'Send Order Request'}
+        </button>
+
+        <button type="button" className="text-btn center" onClick={onOpenCare} style={{ marginTop: 8 }}>
+          <Headphones size={15} style={{ marginRight: 4 }} /> Questions? Contact Customer Care
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Order Cards & Pagination Helpers                                    */
+/* ------------------------------------------------------------------ */
+function PaginationBar({ currentPage, totalItems, itemsPerPage, onPageChange }) {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  if (totalPages <= 1) return null;
+
+  const start = (currentPage - 1) * itemsPerPage + 1;
+  const end = Math.min(currentPage * itemsPerPage, totalItems);
+
+  return (
+    <div className="pagination-bar">
+      <span className="page-info">Showing {start}–{end} of {totalItems} orders</span>
+      <div className="page-controls">
+        <button className="page-btn" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>
+          <ChevronLeft size={16} /> Previous
+        </button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          <button key={p} className={`page-btn ${p === currentPage ? 'active' : ''}`} onClick={() => onPageChange(p)}>
+            {p}
+          </button>
+        ))}
+        <button className="page-btn" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>
+          Next <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrderCard({ order, admin = false }) {
+  const [status, setStatus] = useState(order.status);
+  const qc = useQueryClient();
+
+  const update = useMutation({
+    mutationFn: next => api.patch(`/orders/admin/${order._id}/status`, { status: next }),
+    onSuccess: result => {
+      setStatus(result.data.order.status);
+      qc.invalidateQueries({ queryKey: ['admin-orders'] });
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    }
+  });
+
+  const whatsappText = `Hello ${order.customerName},\n\n*Reddy's Home Foods - Order #${order._id.slice(-6).toUpperCase()}*\n${order.items.map(i => `• ${i.name} × ${i.quantity}`).join('\n')}\n\n*Total Amount:* ${format(order.totalAmount)}\n*Fulfilment:* ${order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}\n\nWe are contacting you to confirm your fresh order.`;
+  const whatsappUrl = `https://wa.me/${order.customerPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(whatsappText)}`;
+  const cleanMapsUrl = order.deliveryAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress.replace(/^[^:]+:\s*/, '').trim())}`
+    : null;
+
+  return (
+    <article className="order-card friendly-order">
+      <div className="order-top">
+        <div>
+          <p className="category">ORDER #{order._id.slice(-6).toUpperCase()}</p>
+          <h3>{statusLabels[status] || status}</h3>
+          <p className="muted">{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+        </div>
+        <span className="status">{statusLabels[status] || status}</span>
+      </div>
+
+      {admin && (
+        <div className="customer-contact">
+          <div>
+            <b>{order.customerName || 'Customer'}</b>
+            <span>{order.customerPhone || 'No phone'}</span>
+          </div>
+          <div>
+            <span>{order.customerEmail}</span>
+            <span>{order.fulfilment === 'delivery' ? `Delivery: ${order.deliveryAddress}` : 'Store Pickup'}</span>
+          </div>
+        </div>
+      )}
+
+      <p className="order-items">{order.items.map(i => `${i.name} × ${i.quantity}`).join(', ')}</p>
+
+      <div className="order-bottom">
+        <span>{order.fulfilment === 'delivery' ? <><MapPin size={15} /> Delivery</> : 'Store Pickup'} · Total: <strong>{format(order.totalAmount)}</strong></span>
+
+        {admin ? (
+          <div className="admin-actions">
+            <a className="whatsapp" href={whatsappUrl} target="_blank" rel="noreferrer"><MessageCircle size={17} /> WhatsApp</a>
+            <a className="call" href={`tel:${order.customerPhone}`}><Phone size={16} /> Call</a>
+            {order.fulfilment === 'delivery' && cleanMapsUrl && (
+              <a className="call" href={cleanMapsUrl} target="_blank" rel="noreferrer" style={{ background: '#3b82f6', color: '#fff' }}>
+                <MapPin size={15} /> Open Maps
+              </a>
+            )}
+            <select value={status} disabled={update.isPending} onChange={e => update.mutate(e.target.value)}>
+              {Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function Orders() {
+  const { user } = useAuth();
+  const [tab, setTab] = useState('active');
+  const [page, setPage] = useState(1);
+
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => api.get('/orders/my-orders').then(r => r.data.orders),
+    enabled: !!user
+  });
+
+  if (!user) return <Navigate to="/login" />;
+
+  const isCompleted = status => status === 'delivered' || status === 'cancelled';
+  const activeOrders = orders.filter(o => !isCompleted(o.status));
+  const pastOrders = orders.filter(o => isCompleted(o.status));
+
+  const list = tab === 'active' ? activeOrders : pastOrders;
+  const paginated = list.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  return (
+    <section className="section narrow">
+      <p className="eyebrow">Your History</p>
+      <h1>My Orders</h1>
+
+      <div className="order-tab-bar">
+        <button type="button" className={`tab-btn ${tab === 'active' ? 'active' : ''}`} onClick={() => { setTab('active'); setPage(1); }}>
+          Active Orders <span className="badge-count">{activeOrders.length}</span>
+        </button>
+        <button type="button" className={`tab-btn ${tab === 'past' ? 'active' : ''}`} onClick={() => { setTab('past'); setPage(1); }}>
+          Past Order History <span className="badge-count">{pastOrders.length}</span>
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p>Loading orders...</p>
+      ) : !list.length ? (
+        <div className="empty">No {tab === 'active' ? 'active order requests' : 'past orders'} found.</div>
+      ) : (
+        <>
+          <div className="order-list">
+            {paginated.map(order => <OrderCard key={order._id} order={order} />)}
+          </div>
+          <PaginationBar currentPage={page} totalItems={list.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={p => setPage(p)} />
+        </>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin Order Desk & Redesigned Store Profile Settings               */
+/* ------------------------------------------------------------------ */
+function EnhancedOrderDesk() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('active'); // active, delivered, cancelled, all
+  const [subStatus, setSubStatus] = useState('all');
+  const [page, setPage] = useState(1);
+  const [notice, setNotice] = useState('');
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data.settings),
+    enabled: user?.role === 'admin'
+  });
+
+  const [storeForm, setStoreForm] = useState(null);
+
+  useEffect(() => {
+    if (settingsData) {
+      setStoreForm({
+        storeAddress: settingsData.storeAddress || '',
+        storePhone: settingsData.storePhone || '',
+        storeEmail: settingsData.storeEmail || '',
+        customerCareNotice: settingsData.customerCareNotice || '',
+        instantStartTime: settingsData.instantStartTime || '09:00',
+        instantEndTime: settingsData.instantEndTime || '20:00'
+      });
+    }
+  }, [settingsData]);
+
+  const updateSettings = useMutation({
+    mutationFn: values => api.patch('/settings', values),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      setNotice("Reddy's Home Foods store profile & address settings updated successfully!");
+      setTimeout(() => setNotice(''), 3500);
+    }
+  });
+
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ['admin-orders', search],
+    queryFn: () => api.get('/orders/admin', { params: { search } }).then(r => r.data.orders),
+    enabled: user?.role === 'admin'
+  });
+
+  if (user?.role !== 'admin') return <Navigate to="/" />;
+
+  // Filter orders by active vs history vs status
+  const activeList = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
+  const deliveredList = orders.filter(o => o.status === 'delivered');
+  const cancelledList = orders.filter(o => o.status === 'cancelled');
+
+  let currentList = orders;
+  if (tab === 'active') currentList = activeList;
+  else if (tab === 'delivered') currentList = deliveredList;
+  else if (tab === 'cancelled') currentList = cancelledList;
+
+  if (subStatus !== 'all') {
+    currentList = currentList.filter(o => o.status === subStatus);
+  }
+
+  const paginatedOrders = currentList.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  return (
+    <section className="section">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow">Reddy's Home Foods Admin</p>
+          <h1>Order Desk & Store Profile</h1>
+        </div>
+      </div>
+
+      {/* Redesigned Admin Store Settings Form */}
+      {storeForm && (
+        <form className="settings-section-card" onSubmit={e => { e.preventDefault(); updateSettings.mutate(storeForm); }}>
+          <div className="settings-header">
+            <div className="settings-header-icon">
+              <MapPin size={24} />
+            </div>
+            <div>
+              <h2>Store Profile & Pickup Address Settings</h2>
+              <p>Manage pickup address, customer support contact numbers, and instant order timings shown to users.</p>
+            </div>
+          </div>
+
+          {notice && <p className="success-note" style={{ margin: 0 }}>{notice}</p>}
+
+          <div className="settings-form-grid">
+            <div className="form-field-card full-width">
+              <label><MapPin size={14} /> Store Pickup Address (Visible to Customers)</label>
+              <textarea required rows={2} value={storeForm.storeAddress} onChange={e => setStoreForm({ ...storeForm, storeAddress: e.target.value })} placeholder="Reddy's Home Foods, Main Road..." />
+            </div>
+
+            <div className="form-field-card">
+              <label><Phone size={14} /> Support Phone (Calls & WhatsApp)</label>
+              <input required value={storeForm.storePhone} onChange={e => setStoreForm({ ...storeForm, storePhone: e.target.value })} placeholder="+91 98765 43210" />
+            </div>
+
+            <div className="form-field-card">
+              <label><Mail size={14} /> Support Email Address</label>
+              <input required type="email" value={storeForm.storeEmail} onChange={e => setStoreForm({ ...storeForm, storeEmail: e.target.value })} placeholder="support@reddyshomefoods.com" />
+            </div>
+
+            <div className="form-field-card full-width">
+              <label><Headphones size={14} /> Customer Support Notice Text</label>
+              <input value={storeForm.customerCareNotice} onChange={e => setStoreForm({ ...storeForm, customerCareNotice: e.target.value })} placeholder="Available Mon-Sat 9 AM - 9 PM..." />
+            </div>
+
+            <div className="form-field-card">
+              <label><Clock size={14} /> Instant Orders Start Time</label>
+              <input type="time" value={storeForm.instantStartTime} onChange={e => setStoreForm({ ...storeForm, instantStartTime: e.target.value })} />
+            </div>
+
+            <div className="form-field-card">
+              <label><Clock size={14} /> Instant Orders End Time</label>
+              <input type="time" value={storeForm.instantEndTime} onChange={e => setStoreForm({ ...storeForm, instantEndTime: e.target.value })} />
+            </div>
+          </div>
+
+          <button className="button" disabled={updateSettings.isPending} style={{ width: 'max-content', padding: '12px 24px' }}>
+            {updateSettings.isPending ? 'Saving...' : "Save Reddy's Home Foods Settings"}
+          </button>
+        </form>
+      )}
+
+      <div style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: '24px', margin: '0 0 12px', fontFamily: "'Outfit', sans-serif" }}>Customer Orders Desk</h2>
+
+        {/* Order Tabs */}
+        <div className="order-tab-bar">
+          <button type="button" className={`tab-btn ${tab === 'active' ? 'active' : ''}`} onClick={() => { setTab('active'); setPage(1); }}>
+            Active Orders <span className="badge-count">{activeList.length}</span>
+          </button>
+          <button type="button" className={`tab-btn ${tab === 'delivered' ? 'active' : ''}`} onClick={() => { setTab('delivered'); setPage(1); }}>
+            Delivered History <span className="badge-count">{deliveredList.length}</span>
+          </button>
+          <button type="button" className={`tab-btn ${tab === 'cancelled' ? 'active' : ''}`} onClick={() => { setTab('cancelled'); setPage(1); }}>
+            Cancelled Orders <span className="badge-count">{cancelledList.length}</span>
+          </button>
+          <button type="button" className={`tab-btn ${tab === 'all' ? 'active' : ''}`} onClick={() => { setTab('all'); setPage(1); }}>
+            All Orders <span className="badge-count">{orders.length}</span>
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="filters order-filters">
+          <label style={{ flex: 2 }}><Search size={17} /><input placeholder="Search Order ID, customer name or phone..." value={search} onChange={e => setSearch(e.target.value)} /></label>
+          <label>
+            <Filter size={17} />
+            <select value={subStatus} onChange={e => { setSubStatus(e.target.value); setPage(1); }}>
+              <option value="all">All Specific Statuses</option>
+              {Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {isLoading ? (
+          <p>Loading order desk...</p>
+        ) : !currentList.length ? (
+          <div className="empty">No matching orders in this category.</div>
+        ) : (
+          <>
+            <div className="order-list">
+              {paginatedOrders.map(order => <OrderCard key={order._id} admin order={order} />)}
+            </div>
+            <PaginationBar currentPage={page} totalItems={currentList.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={p => setPage(p)} />
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin Menu Manager (With Delete Snack & Image Removal Capabilities)*/
+/* ------------------------------------------------------------------ */
+function EnhancedMenuManager() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const emptySnack = {
+    name: '',
+    description: '',
+    category: 'Snacks',
+    price: '',
+    unit: 'piece',
+    minimumPreparationDays: '1',
+    preparationType: 'made_to_order',
+    availableQuantity: 99,
+    pickupAvailable: true,
+    deliveryAvailable: true,
+    isFavorite: false,
+    isPopular: false,
+    imageUrls: []
+  };
+
+  const [form, setForm] = useState(emptySnack);
+  const [editingId, setEditingId] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [message, setMessage] = useState('');
+
+  const { data: snacks = [] } = useQuery({
+    queryKey: ['admin-snacks'],
+    queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks),
+    enabled: user?.role === 'admin'
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      const body = new FormData();
+      files.forEach(file => body.append('images', file));
+      return api.post('/uploads/image', body);
+    },
+    onSuccess: r => {
+      setForm(prev => ({
+        ...prev,
+        imageUrls: [...prev.imageUrls, ...r.data.imageUrls].slice(0, 6)
+      }));
+      setFiles([]);
+      setMessage('✅ Images uploaded to Cloudinary successfully!');
+    },
+    onError: e => setMessage(`❌ ${e.response?.data?.message || 'Image upload failed.'}`)
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: values => {
+      const payload = {
+        ...values,
+        price: Number(values.price),
+        advanceAmount: 0,
+        minimumPreparationDays: values.preparationType === 'instant' ? 0 : Number(values.minimumPreparationDays),
+        imageUrl: values.imageUrls[0] || ''
+      };
+      return editingId ? api.patch(`/snacks/${editingId}`, payload) : api.post('/snacks', payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-snacks'] });
+      qc.invalidateQueries({ queryKey: ['snacks'] });
+      setForm(emptySnack);
+      setEditingId(null);
+      setMessage('✅ Snack saved to menu!');
+    },
+    onError: e => setMessage(`❌ ${e.response?.data?.message || 'Could not save snack.'}`)
+  });
+
+  const deleteSnackMutation = useMutation({
+    mutationFn: id => api.delete(`/snacks/${id}?hard=true`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-snacks'] });
+      qc.invalidateQueries({ queryKey: ['snacks'] });
+      setForm(emptySnack);
+      setEditingId(null);
+      setMessage('🗑️ Snack permanently deleted from menu database.');
+    },
+    onError: e => setMessage(`❌ ${e.response?.data?.message || 'Could not delete snack.'}`)
+  });
+
+  const toggleActive = useMutation({
+    mutationFn: snack => api.patch(`/snacks/${snack._id}`, { active: !snack.active }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-snacks'] });
+      qc.invalidateQueries({ queryKey: ['snacks'] });
+    }
+  });
+
+  if (user?.role !== 'admin') return <Navigate to="/" />;
+
+  const startEdit = snack => {
+    setEditingId(snack._id);
+    setForm({
+      ...emptySnack,
+      ...snack,
+      imageUrls: snack.imageUrls?.length ? snack.imageUrls : snack.imageUrl ? [snack.imageUrl] : []
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const removeSingleImage = indexToRemove => {
+    setForm(prev => ({
+      ...prev,
+      imageUrls: prev.imageUrls.filter((_, idx) => idx !== indexToRemove)
+    }));
+  };
+
+  return (
+    <section className="section admin-manager">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow">Reddy's Home Foods Catalogue</p>
+          <h1>Menu Manager</h1>
+        </div>
+        <p className="muted">Create snacks, upload photos via Cloudinary, remove photos, edit, or delete items permanently.</p>
+      </div>
+
+      <div className="menu-manager-grid">
+        <form className="snack-editor" onSubmit={e => { e.preventDefault(); saveMutation.mutate(form); }}>
+          <h2>{editingId ? 'Edit Snack' : 'Create New Snack'}</h2>
+          {message && <p className={message.includes('❌') ? 'error' : 'success-note'}>{message}</p>}
+
+          <div className="image-editor">
+            <b style={{ fontSize: '13px' }}>Upload Cloudinary Product Photos</b>
+            <div className="image-preview-grid">
+              {form.imageUrls.length ? (
+                form.imageUrls.map((url, i) => (
+                  <div key={`${url}-${i}`} style={{ position: 'relative' }}>
+                    <img src={url} alt="Snack preview" />
+                    <button type="button" title="Remove this photo" onClick={() => removeSingleImage(i)} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(239,68,68,0.9)', color: '#fff', border: 0, borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, fontWeight: 'bold' }}>×</button>
+                  </div>
+                ))
+              ) : (
+                <div className="image-empty">Select files below to upload Cloudinary images</div>
+              )}
+            </div>
+
+            <input type="file" multiple accept="image/*" onChange={e => setFiles([...e.target.files].slice(0, 6 - form.imageUrls.length))} />
+            <button type="button" className="button small" disabled={!files.length || uploadMutation.isPending} onClick={() => uploadMutation.mutate()}>
+              <Upload size={14} style={{ marginRight: 5 }} /> {uploadMutation.isPending ? 'Uploading to Cloudinary...' : 'Upload Selected Images'}
+            </button>
+            <label style={{ fontSize: '12px', color: '#64748b' }}>
+              Or paste image URL manually:
+              <input placeholder="https://res.cloudinary.com/..." onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (e.target.value.trim()) {
+                    setForm({ ...form, imageUrls: [...form.imageUrls, e.target.value.trim()].slice(0, 6) });
+                    e.target.value = '';
+                  }
+                }
+              }} />
+            </label>
+          </div>
+
+          <label>
+            Snack Name
+            <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Handmade Samosa" />
+          </label>
+
+          <label>
+            Description
+            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Fresh ingredients, traditional recipe..." />
+          </label>
+
+          <div className="editor-grid">
+            <label>
+              Category
+              <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+            </label>
+            <label>
+              Full Price (₹)
+              <input required type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+            </label>
+            <label>
+              Price Unit
+              <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
+                <option value="piece">Per Piece</option>
+                <option value="kg">Per kg</option>
+                <option value="litre">Per litre</option>
+              </select>
+            </label>
+            <label>
+              Stock Limit
+              <input type="number" min="0" value={form.availableQuantity} onChange={e => setForm({ ...form, availableQuantity: Number(e.target.value) })} />
+            </label>
+            <label>
+              Preparation Type
+              <select value={form.preparationType} onChange={e => setForm({ ...form, preparationType: e.target.value })}>
+                <option value="made_to_order">Made to order</option>
+                <option value="instant">Available now</option>
+              </select>
+            </label>
+            {form.preparationType !== 'instant' && (
+              <label>
+                Preparation Days
+                <input type="number" min="0" value={form.minimumPreparationDays} onChange={e => setForm({ ...form, minimumPreparationDays: e.target.value })} />
+              </label>
+            )}
+          </div>
+
+          <div className="checks" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '8px 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={form.pickupAvailable} onChange={e => setForm({ ...form, pickupAvailable: e.target.checked })} /> Pickup
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={form.deliveryAvailable} onChange={e => setForm({ ...form, deliveryAvailable: e.target.checked })} /> Delivery
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#d97706', fontWeight: 'bold' }}>
+              <input type="checkbox" checked={form.isFavorite} onChange={e => setForm({ ...form, isFavorite: e.target.checked, isPopular: e.target.checked })} /> ⭐ Mark as Favorite (Auto-scroll on Homepage)
+            </label>
+          </div>
+
+          <button className="button full" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? 'Saving...' : editingId ? 'Save Changes' : 'Add Snack to Menu'}
+          </button>
+
+          {editingId && (
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 6 }}>
+              <button type="button" className="text-btn" onClick={() => { setEditingId(null); setForm(emptySnack); }}>
+                Cancel Edit
+              </button>
+              <button type="button" className="button small" style={{ background: '#ef4444' }} onClick={() => {
+                if (window.confirm(`Are you sure you want to permanently delete "${form.name}" from your database?`)) {
+                  deleteSnackMutation.mutate(editingId);
+                }
+              }}>
+                <Trash2 size={14} style={{ marginRight: 4 }} /> Delete Snack Permanently
+              </button>
+            </div>
+          )}
+        </form>
+
+        <div className="manager-list">
+          <h2>Current Snacks ({snacks.length})</h2>
+          {snacks.map(s => (
+            <article className={`manager-snack ${!s.active ? 'inactive' : ''}`} key={s._id}>
+              <img src={s.imageUrl || s.imageUrls?.[0] || ''} alt="" />
+              <div style={{ flex: 1 }}>
+                <b>{s.name} {(s.isFavorite || s.isPopular) && '⭐ Favorite'}</b>
+                <p>{format(s.price)} / {s.unit || 'piece'} · Stock {s.availableQuantity}</p>
+                <small>{s.active ? 'Visible to customers' : 'Hidden'} · {s.preparationType === 'instant' ? 'Available now' : `${s.minimumPreparationDays} days`}</small>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button type="button" className="text-btn" onClick={() => startEdit(s)}>Edit</button>
+                <button type="button" className="text-btn" onClick={() => toggleActive.mutate(s)}>{s.active ? 'Hide' : 'Show'}</button>
+                <button type="button" className="text-btn" style={{ color: '#ef4444' }} onClick={() => {
+                  if (window.confirm(`Permanently delete "${s.name}"?`)) {
+                    deleteSnackMutation.mutate(s._id);
+                  }
+                }}>Delete</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile & Address Management                                       */
+/* ------------------------------------------------------------------ */
+function Profile() {
+  const { user, setUser } = useAuth();
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [address, setAddress] = useState({ label: 'Home', line: '', city: '', pincode: '', isDefault: true });
+  const [notice, setNotice] = useState('');
+
+  const saveProfile = useMutation({
+    mutationFn: () => api.patch('/auth/profile', { phone }),
+    onSuccess: r => { setUser(r.data.user); setNotice('Profile saved.'); }
+  });
+
+  const saveAddress = useMutation({
+    mutationFn: () => api.post('/auth/addresses', address),
+    onSuccess: r => {
+      setUser(r.data.user);
+      setAddress({ label: 'Home', line: '', city: '', pincode: '', isDefault: false });
+      setNotice('Address saved successfully!');
+    }
+  });
+
+  const [locating, setLocating] = useState(false);
+
+  const handleAutoDetectLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+          const data = await res.json();
+          const addr = data.address || {};
+          const road = addr.road || addr.suburb || addr.neighbourhood || addr.residential || '';
+          const house = addr.house_number || addr.building || '';
+          const lineStr = [house, road, addr.suburb, addr.city_district].filter(Boolean).join(', ') || data.display_name?.split(',').slice(0, 3).join(',') || `GPS Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          const cityStr = addr.city || addr.town || addr.village || addr.county || addr.state_district || 'Hyderabad';
+          const pinStr = addr.postcode || '500001';
+
+          setAddress(prev => ({
+            ...prev,
+            line: lineStr,
+            city: cityStr,
+            pincode: pinStr,
+            latitude: lat,
+            longitude: lng
+          }));
+          setNotice('📍 Current location auto-detected! Address fields populated.');
+          setTimeout(() => setNotice(''), 4000);
+        } catch (err) {
+          setAddress(prev => ({ ...prev, latitude: lat, longitude: lng }));
+          setNotice('📍 GPS coordinates captured! Enter street details to save.');
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocating(false);
+        alert("Could not detect location. Please enable location permissions in your browser.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const removeAddress = useMutation({
+    mutationFn: id => api.delete(`/auth/addresses/${id}`),
+    onSuccess: () => api.get('/auth/me').then(r => setUser(r.data.user))
+  });
+
+  if (!user) return <Navigate to="/login" />;
+
+  const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+  return (
+    <section className="section narrow">
+      <p className="eyebrow">Reddy's Home Foods Account</p>
+      <h1>My Account Profile</h1>
+      {notice && <p className="success-note">{notice}</p>}
+
+      {/* User Header Hero Card */}
+      <div className="profile-header-card">
+        <div className="profile-avatar">{initials}</div>
+        <div className="profile-user-info">
+          <h2>{user.name}</h2>
+          <p>{user.email}</p>
+          <span className="role-tag">{user.role === 'admin' ? 'Store Administrator' : 'Valued Customer'}</span>
+        </div>
+      </div>
+
+      <div className="profile-grid-hub">
+        {/* Contact Information Card */}
+        <form className="profile-card" onSubmit={e => { e.preventDefault(); saveProfile.mutate(); }}>
+          <h3><Phone size={18} style={{ color: '#16a34a' }} /> Contact Details</h3>
+          <div className="form-field-card">
+            <label>Full Name</label>
+            <input value={user.name} disabled style={{ background: '#f1f5f9', color: '#64748b' }} />
+          </div>
+          <div className="form-field-card">
+            <label>Email Address</label>
+            <input value={user.email} disabled style={{ background: '#f1f5f9', color: '#64748b' }} />
+          </div>
+          <div className="form-field-card">
+            <label>Phone Number (WhatsApp & Call)</label>
+            <input required minLength="7" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 9876543210" />
+          </div>
+          <button className="button full" disabled={saveProfile.isPending}>
+            {saveProfile.isPending ? 'Saving...' : 'Save Profile Details'}
+          </button>
+        </form>
+
+        {/* Saved Addresses Card */}
+        <div className="profile-card">
+          <h3><MapPin size={18} style={{ color: '#16a34a' }} /> Saved Delivery Addresses</h3>
+          {user.addresses?.length ? (
+            <div className="address-list-wrap">
+              {user.addresses.map(item => (
+                <div className="address-card-item" key={item._id}>
+                  <div className="address-details">
+                    <b>{item.label}{item.isDefault && <span className="badge-default">Default</span>}</b>
+                    <p>{item.line}, {item.city} - {item.pincode}</p>
+                    {item.latitude && item.longitude && (
+                      <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>📍 GPS Pin Attached</span>
+                    )}
+                  </div>
+                  <button className="text-btn" type="button" onClick={() => removeAddress.mutate(item._id)} style={{ color: '#ef4444', flexShrink: 0, padding: 0 }}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No saved delivery addresses yet. Add your standard address below for faster checkout.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Add New Address Form */}
+      <form className="profile-card" onSubmit={e => { e.preventDefault(); saveAddress.mutate(); }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <h3><Plus size={18} style={{ color: '#16a34a' }} /> Add New Delivery Address</h3>
+          <button type="button" className="button small" disabled={locating} onClick={handleAutoDetectLocation} style={{ background: '#0284c7', border: 0 }}>
+            <MapPin size={15} style={{ marginRight: 4 }} /> {locating ? 'Detecting GPS Location...' : 'Use My Current Location'}
+          </button>
+        </div>
+
+        <div className="settings-form-grid" style={{ marginTop: 12 }}>
+          <div className="form-field-card">
+            <label>Address Label (e.g. Home, Office, Parents)</label>
+            <input required placeholder="Home, Office, Work..." value={address.label} onChange={e => setAddress({ ...address, label: e.target.value })} />
+          </div>
+          <div className="form-field-card">
+            <label>City</label>
+            <input required placeholder="Hyderabad, Bengaluru..." value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
+          </div>
+          <div className="form-field-card full-width">
+            <label>Full Street Line Address (Flat / House No, Street, Landmark)</label>
+            <textarea required rows={2} placeholder="Flat 402, Royal Enclave, Road No 10, Jubilee Hills" value={address.line} onChange={e => setAddress({ ...address, line: e.target.value })} />
+          </div>
+          <div className="form-field-card">
+            <label>PIN Code</label>
+            <input required placeholder="500033" value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
+          </div>
+          <div className="form-field-card" style={{ justifyContent: 'center' }}>
+            <label className="check-row" style={{ textTransform: 'none', fontWeight: 600 }}>
+              <input type="checkbox" checked={address.isDefault} onChange={e => setAddress({ ...address, isDefault: e.target.checked })} /> Set as default delivery address
+            </label>
+          </div>
+        </div>
+        <button className="button" disabled={saveAddress.isPending} style={{ width: 'max-content', padding: '12px 24px' }}>
+          {saveAddress.isPending ? 'Saving Address...' : 'Save New Address'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Login & Authentication Component                                    */
+/* ------------------------------------------------------------------ */
+function Login() {
+  const { user, setUser } = useAuth();
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [register, setRegister] = useState(false);
+  const [error, setError] = useState('');
+  const nav = useNavigate();
+
+  if (user) return <Navigate to="/" />;
+
+  const submit = async e => {
+    e.preventDefault();
+    setError('');
+    try {
+      const res = await api.post(register ? '/auth/register' : '/auth/login', register ? form : { email: form.email, password: form.password });
+      setUser(res.data.user);
+      nav('/');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Please check your details and try again.');
+    }
+  };
+
+  return (
+    <div className="auth">
+      <form onSubmit={submit}>
+        <p className="eyebrow">Welcome</p>
+        <h1>{register ? 'Create Your Account' : 'Welcome Back'}</h1>
+        {error && <p className="error">{error}</p>}
+        {register && <input placeholder="Your Full Name" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />}
+        <input type="email" placeholder="Email Address" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+        <input type="password" placeholder="Password (minimum 8 characters)" required minLength="8" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+        <button className="button full">{register ? 'Create Account' : 'Log In'}</button>
+        <a className="google" href={`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/google`}>
+          Continue with Google
+        </a>
+        <button type="button" className="text-btn center" onClick={() => setRegister(!register)}>
+          {register ? 'Already have an account? Log in' : "New to Reddy's Home Foods? Create an account"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')).render(
+  <QueryClientProvider client={new QueryClient()}>
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  </QueryClientProvider>
+);
