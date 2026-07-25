@@ -16,6 +16,7 @@ const snackInput = z.object({
   price: z.number().nonnegative(),
   advanceAmount: z.number().nonnegative().optional().default(0),
   minimumPreparationDays: z.number().int().nonnegative().default(1),
+  maximumPreparationDays: z.number().int().nonnegative().optional().default(0),
   preparationType: z.enum(['made_to_order', 'instant']).default('made_to_order'),
   unit: z.enum(['piece', 'kg', 'litre']).default('piece'),
   availableQuantity: z.number().int().nonnegative().default(9999),

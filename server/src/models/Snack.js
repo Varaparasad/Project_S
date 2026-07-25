@@ -9,6 +9,7 @@ const snackSchema = new mongoose.Schema({
   price: { type: Number, required: true, min: 0 },
   advanceAmount: { type: Number, default: 0, min: 0 },
   minimumPreparationDays: { type: Number, required: true, min: 0 },
+  maximumPreparationDays: { type: Number, min: 0, default: 0 },
   preparationType: { type: String, enum: ['made_to_order', 'instant'], default: 'made_to_order' },
   unit: { type: String, enum: ['piece', 'kg', 'litre'], default: 'piece' },
   availableQuantity: { type: Number, required: true, min: 0, default: 9999 },

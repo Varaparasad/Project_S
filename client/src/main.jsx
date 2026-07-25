@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, Filter, LogOut, MapPin, Menu as MenuIcon, MessageCircle, Minus, Phone, Plus, Search, ShoppingBag, Star, X, Upload, Headphones, Sparkles, Mail, CheckCircle, Trash2, ArrowRight, ShoppingCart, ChevronLeft, ChevronRight, Check, AlertCircle, Home, FileText } from 'lucide-react';
 import { api } from './api';
@@ -28,6 +28,31 @@ const statusLabels = {
 };
 
 const ITEMS_PER_PAGE = 6;
+
+/* ------------------------------------------------------------------ */
+/* Scroll To Top Component (Resets scroll position on navigation)    */
+/* ------------------------------------------------------------------ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Preparation Range Formatter Helper                                 */
+/* ------------------------------------------------------------------ */
+const formatPrepTime = snack => {
+  if (!snack) return '';
+  if (snack.preparationType === 'instant') return 'Available now';
+  const min = Number(snack.minimumPreparationDays || 1);
+  const max = Number(snack.maximumPreparationDays || min);
+  if (min === max || max <= min) {
+    return `Ready in ${min} day${min !== 1 ? 's' : ''}`;
+  }
+  return `Ready in ${min}–${max} days`;
+};
 
 /* ------------------------------------------------------------------ */
 /* Add To Cart Confirmation Modal Component                          */
@@ -91,7 +116,7 @@ function OrderSuccessModal({ open, order, onClose, onViewOrders }) {
           <Phone size={24} style={{ flexShrink: 0 }} />
           <div>
             <strong>We will contact you in 10–15 minutes!</strong>
-            <div style={{ fontSize: '12px', marginTop: 2 }}>Our team will call or WhatsApp your number to confirm your order items and preparation time.</div>
+            <div style={{ fontSize: '12px', marginTop: 2 }}>Our team will call or WhatsApp your number to confirm your order items and preparation timing.</div>
           </div>
         </div>
 
@@ -138,8 +163,8 @@ function CustomerCareModal({ open, onClose }) {
           <X size={20} />
         </button>
         <div className="care-header">
-          <p className="eyebrow"><Headphones size={14} style={{ display: 'inline', marginRight: 4 }} /> Reddy's Home Foods Care</p>
-          <h2>Customer Support & Help</h2>
+          <p className="eyebrow"><Headphones size={14} style={{ display: 'inline', marginRight: 4 }} /> Customer Support</p>
+          <h2>Support & Help Center</h2>
           <p className="muted" style={{ margin: '4px 0 0' }}>{notice}</p>
         </div>
 
@@ -161,7 +186,7 @@ function CustomerCareModal({ open, onClose }) {
           </a>
           <div className="care-card" style={{ cursor: 'default' }}>
             <Clock size={20} />
-            <strong>Instant Order Hours</strong>
+            <strong>Store Service Hours</strong>
             <span>{settingsData?.instantStartTime || '09:00'} - {settingsData?.instantEndTime || '20:00'} IST</span>
           </div>
         </div>
@@ -178,7 +203,7 @@ function CustomerCareModal({ open, onClose }) {
           <h3>How Ordering & Confirmation Works</h3>
           <details className="faq-item" open>
             <summary>What happens after I place an order request?</summary>
-            <p>1. Your request is instantly sent to Reddy's Home Foods team via Telegram & Email.<br />2. Our team calls or WhatsApp messages you within 10–15 minutes to confirm details.<br />3. We prepare your fresh batch for Store Pickup or Doorstep Delivery!</p>
+            <p>1. Select your favorite snacks and place your request.<br />2. Our team calls or WhatsApp messages you within 10–15 minutes to confirm details.<br />3. We prepare your fresh batch for Store Pickup or Doorstep Delivery!</p>
           </details>
           <details className="faq-item">
             <summary>Do I need to pay any advance?</summary>
@@ -326,6 +351,7 @@ function AppShell() {
   return (
     <Auth.Provider value={{ user, setUser, logout: async () => { await api.post('/auth/logout'); setUser(null); qc.clear(); nav('/'); } }}>
       <Cart.Provider value={cart}>
+        <ScrollToTop />
         <Header onOpenCare={() => setShowCareModal(true)} />
         <AddToCartModal snack={addedSnackModal} onClose={() => setAddedSnackModal(null)} onGoToCart={() => { setAddedSnackModal(null); nav('/cart'); }} />
         <OrderSuccessModal open={!!placedOrder} order={placedOrder} onClose={() => setPlacedOrder(null)} onViewOrders={() => { setPlacedOrder(null); nav('/orders'); }} />
@@ -373,11 +399,11 @@ function SnackCard({ snack }) {
     <article className="card">
       <Link to={`/snack/${snack._id}`}>
         <div className="image">
-          {isFav && <span className="fav-badge"><Sparkles size={12} /> Favorite</span>}
-          {imgUrl ? <img src={imgUrl} alt={snack.name} /> : <span>{snack.name.slice(0, 1)}</span>}
+          {isFav && <span className="fav-badge"><Sparkles size={12} /> Popular</span>}
+          {imgUrl ? <img src={imgUrl} alt={snack.name} style={{ objectFit: 'cover', width: '100%', height: '100%' }} /> : <span>{snack.name.slice(0, 1)}</span>}
           <div className={`badge ${instant ? 'instant-badge' : ''}`}>
             <Clock size={13} />
-            {instant ? 'Available now' : `${snack.minimumPreparationDays} day${snack.minimumPreparationDays !== 1 ? 's' : ''}`}
+            {formatPrepTime(snack)}
           </div>
         </div>
       </Link>
@@ -436,9 +462,9 @@ function EnhancedHome({ onOpenCare }) {
   return (
     <>
       <section className="hero">
-        <p className="eyebrow"><Sparkles size={14} style={{ display: 'inline', marginRight: 4 }} /> Reddy's Home Foods</p>
+        <p className="eyebrow"><Sparkles size={14} style={{ display: 'inline', marginRight: 4 }} /> Authentic Kitchen</p>
         <h1>Authentic Homemade Snacks <em>Prepared Fresh for You.</em></h1>
-        <p>Order delicious homemade delicacies. Instant Telegram notification to admin + direct WhatsApp & Call confirmation within 10–15 minutes!</p>
+        <p>Order delicious homemade delicacies. Fresh ingredients, traditional recipes, fast order confirmation within 10–15 minutes!</p>
         <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
           <Link className="button" to="/menu">Explore Full Menu</Link>
           <button type="button" className="button" style={{ background: '#ffffff', color: '#1f2937', border: '1px solid #cbd5e1' }} onClick={onOpenCare}>
@@ -453,24 +479,24 @@ function EnhancedHome({ onOpenCare }) {
           <span>Prepared strictly after your request</span>
         </div>
         <div>
-          <b>Instant Telegram & Call Confirmation</b>
-          <span>We call or WhatsApp within 10–15 mins to confirm</span>
+          <b>Fast Order Confirmation</b>
+          <span>Our team contacts you within 10–15 mins to confirm</span>
         </div>
         <div>
           <b>Store Pickup or Delivery</b>
-          <span>Pick up at gourmet store address or get doorstep delivery</span>
+          <span>Pick up at gourmet store or doorstep delivery</span>
         </div>
       </section>
 
       <section className="section">
         <div className="section-title">
           <div>
-            <p className="eyebrow">Customer Favorites (Auto-scrolling)</p>
-            <h2>Featured & Popular Snacks</h2>
+            <p className="eyebrow">Featured Selections</p>
+            <h2>Popular Homemade Snacks</h2>
           </div>
           <Link className="text-btn" to="/menu">See all snacks →</Link>
         </div>
-        <p className="muted" style={{ margin: '-15px 0 20px' }}>Hover or touch cards to pause the auto-scroll ticker.</p>
+        <p className="muted" style={{ margin: '-15px 0 20px' }}>Handcrafted fresh after your order request is placed.</p>
         {railItems.length ? <PopularRail snacks={railItems} /> : <div className="empty">New snacks arriving soon. Check back shortly!</div>}
       </section>
 
@@ -485,12 +511,12 @@ function EnhancedHome({ onOpenCare }) {
           </div>
           <div>
             <b>2</b>
-            <h3>Instant Admin Alert</h3>
-            <p>Admin immediately receives alert via Telegram & Email.</p>
+            <h3>Instant Request Alert</h3>
+            <p>Our kitchen team immediately receives your order details.</p>
           </div>
           <div>
             <b>3</b>
-            <h3>WhatsApp & Phone Call</h3>
+            <h3>Call / WhatsApp Confirmation</h3>
             <p>We call or message you within 10–15 mins to confirm details.</p>
           </div>
           <div>
@@ -641,7 +667,7 @@ function SnackDetail() {
           <Rating snack={snack} />
           <p style={{ margin: '14px 0 20px', lineHeight: 1.7 }}>{snack.description || 'Handcrafted fresh upon order confirmation.'}</p>
           <div className="product-facts">
-            <span><Clock size={17} /> {instant ? 'Available now' : `Minimum ${snack.minimumPreparationDays} preparation days`}</span>
+            <span><Clock size={17} /> {formatPrepTime(snack)}</span>
             <span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span>
           </div>
           <strong className="product-price">{format(snack.price)} <small style={{ fontSize: '16px', color: '#64748b' }}>per {unit}</small></strong>
@@ -751,7 +777,7 @@ function CartPage({ onOpenCare }) {
               <strong>{format(total)}</strong>
             </div>
             <p className="instant-checkout" style={{ margin: '12px 0 16px' }}>
-              No advance payment required! Admin gets instant Telegram alert and will call/WhatsApp you within 10–15 minutes to confirm.
+              Fast order confirmation — Our team will contact you within 10–15 minutes to confirm details. Zero advance payment required!
             </p>
             <Link className="button full" to="/checkout">Proceed to Checkout</Link>
           </div>
@@ -940,9 +966,11 @@ function OrderCard({ order, admin = false }) {
 
   const whatsappText = `Hello ${order.customerName},\n\n*Reddy's Home Foods - Order #${order._id.slice(-6).toUpperCase()}*\n${order.items.map(i => `• ${i.name} × ${i.quantity}`).join('\n')}\n\n*Total Amount:* ${format(order.totalAmount)}\n*Fulfilment:* ${order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}\n\nWe are contacting you to confirm your fresh order.`;
   const whatsappUrl = `https://wa.me/${order.customerPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(whatsappText)}`;
-  const cleanMapsUrl = order.deliveryAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress.replace(/^[^:]+:\s*/, '').trim())}`
-    : null;
+  const cleanMapsUrl = (order.latitude && order.longitude)
+    ? `https://www.google.com/maps/search/?api=1&query=${order.latitude},${order.longitude}`
+    : order.deliveryAddress
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress.replace(/^[^:]+:\s*/, '').trim())}`
+      : null;
 
   return (
     <article className="order-card friendly-order">
@@ -1049,7 +1077,7 @@ function EnhancedOrderDesk() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState('active'); // active, delivered, cancelled, all
+  const [tab, setTab] = useState('active');
   const [subStatus, setSubStatus] = useState('all');
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
@@ -1092,7 +1120,6 @@ function EnhancedOrderDesk() {
 
   if (user?.role !== 'admin') return <Navigate to="/" />;
 
-  // Filter orders by active vs history vs status
   const activeList = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
   const deliveredList = orders.filter(o => o.status === 'delivered');
   const cancelledList = orders.filter(o => o.status === 'cancelled');
@@ -1117,7 +1144,6 @@ function EnhancedOrderDesk() {
         </div>
       </div>
 
-      {/* Redesigned Admin Store Settings Form */}
       {storeForm && (
         <form className="settings-section-card" onSubmit={e => { e.preventDefault(); updateSettings.mutate(storeForm); }}>
           <div className="settings-header">
@@ -1173,7 +1199,6 @@ function EnhancedOrderDesk() {
       <div style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: '24px', margin: '0 0 12px', fontFamily: "'Outfit', sans-serif" }}>Customer Orders Desk</h2>
 
-        {/* Order Tabs */}
         <div className="order-tab-bar">
           <button type="button" className={`tab-btn ${tab === 'active' ? 'active' : ''}`} onClick={() => { setTab('active'); setPage(1); }}>
             Active Orders <span className="badge-count">{activeList.length}</span>
@@ -1189,7 +1214,6 @@ function EnhancedOrderDesk() {
           </button>
         </div>
 
-        {/* Filters */}
         <div className="filters order-filters">
           <label style={{ flex: 2 }}><Search size={17} /><input placeholder="Search Order ID, customer name or phone..." value={search} onChange={e => setSearch(e.target.value)} /></label>
           <label>
@@ -1219,7 +1243,7 @@ function EnhancedOrderDesk() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Admin Menu Manager (With Delete Snack & Image Removal Capabilities)*/
+/* Admin Menu Manager                                                 */
 /* ------------------------------------------------------------------ */
 function EnhancedMenuManager() {
   const { user } = useAuth();
@@ -1232,6 +1256,7 @@ function EnhancedMenuManager() {
     price: '',
     unit: 'piece',
     minimumPreparationDays: '1',
+    maximumPreparationDays: '2',
     preparationType: 'made_to_order',
     availableQuantity: 99,
     pickupAvailable: true,
@@ -1271,11 +1296,14 @@ function EnhancedMenuManager() {
 
   const saveMutation = useMutation({
     mutationFn: values => {
+      const minDays = Number(values.minimumPreparationDays || 1);
+      const maxDays = Number(values.maximumPreparationDays || minDays);
       const payload = {
         ...values,
         price: Number(values.price),
         advanceAmount: 0,
-        minimumPreparationDays: values.preparationType === 'instant' ? 0 : Number(values.minimumPreparationDays),
+        minimumPreparationDays: values.preparationType === 'instant' ? 0 : minDays,
+        maximumPreparationDays: values.preparationType === 'instant' ? 0 : Math.max(minDays, maxDays),
         imageUrl: values.imageUrls[0] || ''
       };
       return editingId ? api.patch(`/snacks/${editingId}`, payload) : api.post('/snacks', payload);
@@ -1317,6 +1345,8 @@ function EnhancedMenuManager() {
     setForm({
       ...emptySnack,
       ...snack,
+      minimumPreparationDays: snack.minimumPreparationDays || '1',
+      maximumPreparationDays: snack.maximumPreparationDays || snack.minimumPreparationDays || '2',
       imageUrls: snack.imageUrls?.length ? snack.imageUrls : snack.imageUrl ? [snack.imageUrl] : []
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1416,10 +1446,16 @@ function EnhancedMenuManager() {
               </select>
             </label>
             {form.preparationType !== 'instant' && (
-              <label>
-                Preparation Days
-                <input type="number" min="0" value={form.minimumPreparationDays} onChange={e => setForm({ ...form, minimumPreparationDays: e.target.value })} />
-              </label>
+              <>
+                <label>
+                  Min Prep Days
+                  <input type="number" min="0" value={form.minimumPreparationDays} onChange={e => setForm({ ...form, minimumPreparationDays: e.target.value, maximumPreparationDays: Math.max(Number(e.target.value), Number(form.maximumPreparationDays || e.target.value)) })} />
+                </label>
+                <label>
+                  Max Prep Days
+                  <input type="number" min="0" value={form.maximumPreparationDays} onChange={e => setForm({ ...form, maximumPreparationDays: e.target.value })} />
+                </label>
+              </>
             )}
           </div>
 
@@ -1431,7 +1467,7 @@ function EnhancedMenuManager() {
               <input type="checkbox" checked={form.deliveryAvailable} onChange={e => setForm({ ...form, deliveryAvailable: e.target.checked })} /> Delivery
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#d97706', fontWeight: 'bold' }}>
-              <input type="checkbox" checked={form.isFavorite} onChange={e => setForm({ ...form, isFavorite: e.target.checked, isPopular: e.target.checked })} /> ⭐ Mark as Favorite (Auto-scroll on Homepage)
+              <input type="checkbox" checked={form.isFavorite} onChange={e => setForm({ ...form, isFavorite: e.target.checked, isPopular: e.target.checked })} /> ⭐ Mark as Popular (Featured Selections)
             </label>
           </div>
 
@@ -1461,9 +1497,9 @@ function EnhancedMenuManager() {
             <article className={`manager-snack ${!s.active ? 'inactive' : ''}`} key={s._id}>
               <img src={s.imageUrl || s.imageUrls?.[0] || ''} alt="" />
               <div style={{ flex: 1 }}>
-                <b>{s.name} {(s.isFavorite || s.isPopular) && '⭐ Favorite'}</b>
+                <b>{s.name} {(s.isFavorite || s.isPopular) && '⭐ Popular'}</b>
                 <p>{format(s.price)} / {s.unit || 'piece'} · Stock {s.availableQuantity}</p>
-                <small>{s.active ? 'Visible to customers' : 'Hidden'} · {s.preparationType === 'instant' ? 'Available now' : `${s.minimumPreparationDays} days`}</small>
+                <small>{s.active ? 'Visible to customers' : 'Hidden'} · {formatPrepTime(s)}</small>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button type="button" className="text-btn" onClick={() => startEdit(s)}>Edit</button>
@@ -1567,7 +1603,6 @@ function Profile() {
       <h1>My Account Profile</h1>
       {notice && <p className="success-note">{notice}</p>}
 
-      {/* User Header Hero Card */}
       <div className="profile-header-card">
         <div className="profile-avatar">{initials}</div>
         <div className="profile-user-info">
@@ -1578,7 +1613,6 @@ function Profile() {
       </div>
 
       <div className="profile-grid-hub">
-        {/* Contact Information Card */}
         <form className="profile-card" onSubmit={e => { e.preventDefault(); saveProfile.mutate(); }}>
           <h3><Phone size={18} style={{ color: '#16a34a' }} /> Contact Details</h3>
           <div className="form-field-card">
@@ -1598,7 +1632,6 @@ function Profile() {
           </button>
         </form>
 
-        {/* Saved Addresses Card */}
         <div className="profile-card">
           <h3><MapPin size={18} style={{ color: '#16a34a' }} /> Saved Delivery Addresses</h3>
           {user.addresses?.length ? (
@@ -1624,7 +1657,6 @@ function Profile() {
         </div>
       </div>
 
-      {/* Add New Address Form */}
       <form className="profile-card" onSubmit={e => { e.preventDefault(); saveAddress.mutate(); }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <h3><Plus size={18} style={{ color: '#16a34a' }} /> Add New Delivery Address</h3>
