@@ -32,6 +32,18 @@ const addressSchema = z.object({ label: z.string().min(2).max(40), line: z.strin
 router.post('/addresses', requireAuth, validate(addressSchema), async (req, res, next) => { try { if (req.body.isDefault || !req.user.addresses?.length) req.user.addresses.forEach(address => { address.isDefault = false; }); req.user.addresses.push(req.body); await req.user.save(); res.status(201).json({ user: publicUser(req.user) }); } catch (e) { next(e); } });
 router.patch('/addresses/:id', requireAuth, validate(addressSchema.partial()), async (req, res, next) => { try { const address = req.user.addresses.id(req.params.id); if (!address) return res.status(404).json({ message: 'Address not found.' }); if (req.body.isDefault) req.user.addresses.forEach(item => { item.isDefault = false; }); Object.assign(address, req.body); await req.user.save(); res.json({ user: publicUser(req.user) }); } catch (e) { next(e); } });
 router.delete('/addresses/:id', requireAuth, async (req, res, next) => { try { const address = req.user.addresses.id(req.params.id); if (!address) return res.status(404).json({ message: 'Address not found.' }); address.deleteOne(); await req.user.save(); res.status(204).end(); } catch (e) { next(e); } });
+import { sendTestEmail } from '../services/email.js';
+
+router.all('/test-email', async (req, res, next) => {
+  try {
+    const to = req.query.email || req.body?.email;
+    const info = await sendTestEmail(to);
+    res.json({ ok: true, message: 'Test email sent successfully via Port 465 SSL!', messageId: info.messageId });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
 router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=google` }), (req, res) => { res.cookie('token', jwt.sign({ sub: req.user.id }, process.env.JWT_SECRET, { expiresIn: '7d' }), cookieOptions); res.redirect(`${process.env.CLIENT_URL}/`); });
 export default router;

@@ -12,16 +12,22 @@ const configured = () =>
       process.env.ADMIN_EMAIL
   );
 
-const transport = () =>
-  nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT) === 465,
+const transport = () => {
+  const port = Number(process.env.SMTP_PORT || 465);
+  const isSecure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === 'true' : (port === 465);
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port,
+    secure: isSecure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
+};
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                */
@@ -284,6 +290,27 @@ export async function sendOrderAlert(order) {
     await sendTelegramMessage(`✅ Backup email sent for order #${id}`);
   } catch (err) {
     console.error("❌ Email failed", err);
-    await sendTelegramMessage(`❌ Backup email FAILED for order #${id}`);
+    await sendTelegramMessage(`❌ Backup email FAILED for order #${id}: ${err.message}`);
   }
+}
+
+export async function sendTestEmail(toEmail) {
+  if (!configured()) {
+    throw new Error('SMTP environment variables are missing (SMTP_HOST, SMTP_USER, SMTP_PASS, ADMIN_EMAIL).');
+  }
+  const recipient = toEmail || process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  const info = await transport().sendMail({
+    from: `"${process.env.STORE_NAME || "Reddy's Home Foods"}" <${process.env.SMTP_USER}>`,
+    to: recipient,
+    subject: `⚡ Test Email from ${process.env.STORE_NAME || "Reddy's Home Foods"}`,
+    text: `Hello! This is a test email sent from your website via Port 465 SSL. If you received this, email delivery is working 100% on Render!`,
+    html: `
+      <div style="font-family:Arial,sans-serif;padding:20px;border:1px solid #16a34a;border-radius:10px;background:#f0fdf4;">
+        <h2 style="color:#15803d;margin:0 0 10px;">✅ Email Delivery Test Successful!</h2>
+        <p style="color:#1e293b;font-size:14px;">This test email was sent successfully via <b>Port 465 (Implicit SSL)</b> on <b>${process.env.STORE_NAME || "Reddy's Home Foods"}</b>.</p>
+        <p style="color:#64748b;font-size:12px;margin-top:15px;">Recipient: ${recipient}</p>
+      </div>`
+  });
+  console.log('✅ Test email sent successfully:', info.messageId);
+  return info;
 }
