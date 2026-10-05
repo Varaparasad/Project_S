@@ -10,20 +10,23 @@ import StoreSettings from '../models/StoreSettings.js';
 const router = Router();
 const statuses = ['request_received', 'contacting_customer', 'awaiting_confirmation', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'];
 const instantOpen = (settings, now = new Date()) => { const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now); return settings.instantStartTime <= settings.instantEndTime ? time >= settings.instantStartTime && time < settings.instantEndTime : time >= settings.instantStartTime || time < settings.instantEndTime; };
-const createSchema = z.object({ items: z.array(z.object({ snackId: z.string().length(24), quantity: z.number().int().min(1).max(50) })).min(1).max(30), fulfilment: z.enum(['pickup', 'delivery']), deliveryAddress: z.string().max(500).optional(), latitude: z.number().optional(), longitude: z.number().optional(), phone: z.string().min(7).max(20) });
+const createSchema = z.object({ items: z.array(z.object({ snackId: z.string().length(24), quantity: z.number().int().min(1).max(50), weightGrams: z.number().int().min(250).max(50000).optional() })).min(1).max(30), fulfilment: z.enum(['pickup', 'delivery']), deliveryAddress: z.string().max(500).optional(), latitude: z.number().optional(), longitude: z.number().optional(), phone: z.string().min(7).max(20) });
 
 router.post('/', requireAuth, validate(createSchema), async (req, res, next) => { try {
   if (req.body.fulfilment === 'delivery' && !req.body.deliveryAddress?.trim()) return res.status(400).json({ message: 'A delivery address is required.' });
-  const snackIds = req.body.items.map(i => i.snackId);
+  const snackIds = [...new Set(req.body.items.map(i => i.snackId))];
   const snacks = await Snack.find({ _id: { $in: snackIds }, active: true });
   if (snacks.length !== snackIds.length) return res.status(400).json({ message: 'One or more snacks are unavailable.' });
   const map = new Map(snacks.map(s => [s.id, s]));
   const settings = await StoreSettings.findOneAndUpdate({ key: 'main' }, {}, { new: true, upsert: true, setDefaultsOnInsert: true });
   
   const items = [];
-  for (const { snackId, quantity } of req.body.items) {
+  for (const { snackId, quantity, weightGrams } of req.body.items) {
     const s = map.get(snackId);
-    if (quantity > s.availableQuantity) {
+    if (s.unit === 'kg' && (!weightGrams || weightGrams % 250 !== 0)) return res.status(400).json({ message: `${s.name} must be ordered in 250 g steps.` });
+    if (s.unit !== 'kg' && weightGrams) return res.status(400).json({ message: 'Weight selection is only available for kilogram-priced snacks.' });
+    const orderQuantity = s.unit === 'kg' ? (weightGrams / 1000) * quantity : quantity;
+    if (orderQuantity > s.availableQuantity) {
       return res.status(400).json({ message: `${s.name} has only ${s.availableQuantity} available.` });
     }
     if (!(req.body.fulfilment === 'pickup' ? s.pickupAvailable : s.deliveryAvailable)) {
@@ -37,7 +40,8 @@ router.post('/', requireAuth, validate(createSchema), async (req, res, next) => 
       snack: s.id,
       name: s.name,
       imageUrl: s.imageUrl,
-      quantity,
+      quantity: orderQuantity,
+      ...(s.unit === 'kg' ? { weightGrams } : {}),
       price: s.price,
       advanceAmount: 0,
       minimumPreparationDays: isInstant ? 0 : s.minimumPreparationDays,

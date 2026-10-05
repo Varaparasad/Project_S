@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const itemSchema = new mongoose.Schema({
   snack: { type: mongoose.Schema.Types.ObjectId, ref: 'Snack', required: true },
-  name: String, imageUrl: String, quantity: { type: Number, min: 1 },
+  name: String, imageUrl: String, quantity: { type: Number, min: 0.001 }, weightGrams: { type: Number, min: 250 },
   price: Number, advanceAmount: Number, minimumPreparationDays: Number, preparationType: String, unit: String
 }, { _id: false });
 

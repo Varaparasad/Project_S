@@ -28,6 +28,11 @@ const statusLabels = {
 };
 
 const ITEMS_PER_PAGE = 6;
+const DEFAULT_CATEGORY_IMAGE = 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?auto=format&fit=crop&w=900&q=80';
+
+function LoadingState({ label = 'Loading fresh snacks...' }) {
+  return <div className="loading-state" role="status"><span className="loading-spinner" /><p>{label}</p></div>;
+}
 
 /* ------------------------------------------------------------------ */
 /* Scroll To Top Component (Resets scroll position on navigation)    */
@@ -206,8 +211,8 @@ function CustomerCareModal({ open, onClose }) {
             <p>1. Select your favorite snacks and place your request.<br />2. Our team calls or WhatsApp messages you within 10–15 minutes to confirm details.<br />3. We prepare your fresh batch for Store Pickup or Doorstep Delivery!</p>
           </details>
           <details className="faq-item">
-            <summary>Do I need to pay any advance?</summary>
-            <p>No! No advance payment is needed when placing your request. Full payment is confirmed over call/WhatsApp or upon delivery/pickup.</p>
+            <summary>how do I need to pay?</summary>
+            <p>Full payment is confirmed over call/WhatsApp through our team</p>
           </details>
           <details className="faq-item">
             <summary>Can I pick up my order from the store?</summary>
@@ -240,7 +245,7 @@ function Header({ onOpenCare }) {
         </button>
         <nav className={`nav-links ${open ? 'open' : ''}`}>
           <Link to="/" onClick={closeMenu}>Home</Link>
-          <Link to="/menu" onClick={closeMenu}>Browse snacks</Link>
+          <Link to="/categories" onClick={closeMenu}>Browse snacks</Link>
           {!admin && user && (
             <>
               <Link to="/orders" onClick={closeMenu}>My orders</Link>
@@ -253,9 +258,6 @@ function Header({ onOpenCare }) {
               <Link to="/menu-manager" onClick={closeMenu}>Menu Manager</Link>
             </>
           )}
-          <button type="button" className="text-btn" onClick={() => { onOpenCare(); closeMenu(); }}>
-            <Headphones size={17} /> Customer Care
-          </button>
           {!admin && (
             <Link className="cart-link" to="/cart" onClick={closeMenu}>
               <ShoppingBag size={18} /> Cart <b>{count}</b>
@@ -305,7 +307,7 @@ function Footer({ onOpenCare }) {
             <Mail size={15} style={{ color: '#3b82f6' }} /> {settings?.storeEmail || 'support@reddyshomefoods.com'}
           </p>
           <button type="button" className="button small" onClick={onOpenCare} style={{ background: '#276044' }}>
-            <Headphones size={15} style={{ marginRight: 5 }} /> Open Customer Care
+            <Headphones size={15} style={{ marginRight: 5 }} />Customer Care
           </button>
         </div>
       </div>
@@ -339,12 +341,13 @@ function AppShell() {
     count: items.reduce((sum, item) => sum + item.quantity, 0),
     add: snack => {
       setItems(old => {
-        const current = old.find(item => item._id === snack._id);
-        return current ? old.map(item => item._id === snack._id ? { ...item, quantity: item.quantity + 1 } : item) : [...old, { ...snack, quantity: 1 }];
+        const cartKey = snack.cartKey || snack._id;
+        const current = old.find(item => (item.cartKey || item._id) === cartKey);
+        return current ? old.map(item => (item.cartKey || item._id) === cartKey ? { ...item, quantity: item.quantity + 1 } : item) : [...old, { ...snack, cartKey, quantity: 1 }];
       });
       setAddedSnackModal(snack);
     },
-    change: (id, quantity) => setItems(old => quantity < 1 ? old.filter(item => item._id !== id) : old.map(item => item._id === id ? { ...item, quantity } : item)),
+    change: (id, quantity) => setItems(old => quantity < 1 ? old.filter(item => (item.cartKey || item._id) !== id) : old.map(item => (item.cartKey || item._id) === id ? { ...item, quantity } : item)),
     clear: () => setItems([])
   }), [items]);
 
@@ -359,6 +362,7 @@ function AppShell() {
         <main style={{ minHeight: '75vh' }}>
           <Routes>
             <Route path="/" element={<EnhancedHome onOpenCare={() => setShowCareModal(true)} />} />
+            <Route path="/categories" element={<CategoryBrowse />} />
             <Route path="/menu" element={<Menu />} />
             <Route path="/snack/:id" element={<SnackDetail />} />
             <Route path="/login" element={<Login />} />
@@ -466,7 +470,7 @@ function EnhancedHome({ onOpenCare }) {
         <h1>Authentic Homemade Snacks <em>Prepared Fresh for You.</em></h1>
         <p>Order delicious homemade delicacies. Fresh ingredients, traditional recipes, fast order confirmation within 10–15 minutes!</p>
         <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-          <Link className="button" to="/menu">Explore Full Menu</Link>
+          <Link className="button" to="/categories">Explore Full Menu</Link>
           <button type="button" className="button" style={{ background: '#ffffff', color: '#1f2937', border: '1px solid #cbd5e1' }} onClick={onOpenCare}>
             <Headphones size={17} style={{ marginRight: 6 }} /> Customer Care
           </button>
@@ -494,7 +498,7 @@ function EnhancedHome({ onOpenCare }) {
             <p className="eyebrow">Featured Selections</p>
             <h2>Popular Homemade Snacks</h2>
           </div>
-          <Link className="text-btn" to="/menu">See all snacks →</Link>
+          <Link className="text-btn" to="/categories">See all snacks →</Link>
         </div>
         <p className="muted" style={{ margin: '-15px 0 20px' }}>Handcrafted fresh after your order request is placed.</p>
         {railItems.length ? <PopularRail snacks={railItems} /> : <div className="empty">New snacks arriving soon. Check back shortly!</div>}
@@ -507,7 +511,7 @@ function EnhancedHome({ onOpenCare }) {
           <div>
             <b>1</b>
             <h3>Select & Send Request</h3>
-            <p>Select your favorite snacks and send your request (zero advance fee!).</p>
+            <p>Select your favorite snacks and send your request.</p>
           </div>
           <div>
             <b>2</b>
@@ -533,6 +537,37 @@ function EnhancedHome({ onOpenCare }) {
 /* ------------------------------------------------------------------ */
 /* Menu Page                                                          */
 /* ------------------------------------------------------------------ */
+function CategoryBrowse() {
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.get('/categories').then(r => r.data.categories)
+  });
+
+  return (
+    <section className="section category-page">
+      <div className="category-page-hero">
+        <p className="eyebrow">Find your favourite</p>
+        <h1>Browse by category</h1>
+        <p>Choose a collection to explore freshly prepared snacks, sweets, savouries, and more.</p>
+      </div>
+      {isLoading ? <LoadingState label="Loading snack categories..." /> : categories.length ? (
+        <div className="category-card-grid">
+          {categories.map(category => (
+            <Link className="category-card" to={'/menu?category=' + encodeURIComponent(category.name)} key={category._id}>
+              <div className="category-card-image">
+                <img src={category.imageUrl || DEFAULT_CATEGORY_IMAGE} alt={category.name} />
+              </div>
+              <div><h2>{category.name}</h2><p>{category.snackCount} snack{category.snackCount !== 1 ? 's' : ''} to explore</p></div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="empty">The snack collections are being prepared. Please check back shortly.</div>
+      )}
+    </section>
+  );
+}
+
 function Menu() {
   const { data: snacks = [], isLoading } = useQuery({
     queryKey: ['snacks'],
@@ -541,6 +576,11 @@ function Menu() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [days, setDays] = useState('all');
+  const location = useLocation();
+
+  useEffect(() => {
+    setCategory(new URLSearchParams(location.search).get('category') || 'all');
+  }, [location.search]);
 
   const categories = [...new Set(snacks.map(snack => snack.category))];
   const filtered = snacks.filter(snack =>
@@ -583,7 +623,7 @@ function Menu() {
       </div>
 
       {isLoading ? (
-        <p>Loading snacks catalogue...</p>
+        <LoadingState label="Loading the snack catalogue..." />
       ) : (
         <>
           <p className="results">{filtered.length} snack{filtered.length !== 1 ? 's' : ''} available</p>
@@ -608,6 +648,8 @@ function SnackDetail() {
   const [activeImg, setActiveImg] = useState(0);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [weightGrams, setWeightGrams] = useState(250);
+  const [customKg, setCustomKg] = useState('0.25');
 
   const { data: snackResult, isLoading } = useQuery({
     queryKey: ['snack', id],
@@ -634,13 +676,33 @@ function SnackDetail() {
     }
   });
 
-  if (isLoading) return <section className="section">Loading item details...</section>;
+  if (isLoading) return <section className="section"><LoadingState label="Preparing the snack details..." /></section>;
   const snack = snackResult?.snack;
   if (!snack) return <section className="section">Snack item not found.</section>;
 
   const images = snack.imageUrls?.length ? snack.imageUrls : snack.imageUrl ? [snack.imageUrl] : [];
   const instant = snack.preparationType === 'instant';
   const unit = snack.unit === 'kg' ? 'kg' : snack.unit === 'litre' ? 'litre' : 'piece';
+  const isWeightPriced = snack.unit === 'kg';
+  const chosenKg = weightGrams / 1000;
+  const selectedSnack = isWeightPriced ? { ...snack, weightGrams, cartKey: snack._id + '-' + weightGrams } : snack;
+  const displayWeight = grams => grams >= 1000 ? (grams / 1000).toFixed(2).replace(/\\.00$/, '').replace(/(\\.\\d)0$/, '$1') + ' kg' : grams + ' g';
+  const setWeight = grams => {
+    const safe = Math.max(250, Math.min(50000, Math.round(grams / 250) * 250));
+    setWeightGrams(safe);
+    setCustomKg((safe / 1000).toString());
+  };
+  const updateCustomKg = value => {
+    const next = value.replace(',', '.');
+    if (!/^\d*(?:\.\d*)?$/.test(next)) return;
+    const [, decimal = ''] = next.split('.');
+    // Permit only the partial values needed to type .25, .5, or .75.
+    if (decimal && !['2', '5', '7', '25', '50', '75'].includes(decimal)) return;
+    if (Number(next) > 50) return;
+    setCustomKg(next);
+    const validQuarterKg = /^\d+(?:\.(?:25|5|50|75))?$/.test(next);
+    if (validQuarterKg && Number(next) >= 0.25) setWeight(Number(next) * 1000);
+  };
 
   return (
     <section className="section product-page">
@@ -672,11 +734,33 @@ function SnackDetail() {
           </div>
           <strong className="product-price">{format(snack.price)} <small style={{ fontSize: '16px', color: '#64748b' }}>per {unit}</small></strong>
           <p style={{ color: '#16a34a', fontWeight: 600, margin: '8px 0 20px' }}>Full payment upon confirmation / delivery. Zero advance required.</p>
+          {isWeightPriced && (
+            <div className="weight-selector">
+              <div className="weight-selector-head">
+                <div><b>Choose quantity</b><span>Priced at {format(snack.price)} per kg</span></div>
+                <strong>{displayWeight(weightGrams)}</strong>
+              </div>
+              <div className="weight-custom-row">
+                <div className="weight-stepper" aria-label="Adjust weight by 250 grams">
+                  <button type="button" onClick={() => setWeight(weightGrams - 250)} aria-label="Reduce weight"><Minus size={16} /></button>
+                  <span>{displayWeight(weightGrams)}</span>
+                  <button type="button" onClick={() => setWeight(weightGrams + 250)} aria-label="Increase weight"><Plus size={16} /></button>
+                </div>
+                <label>Quantity in kg
+                  <input type="text" inputMode="decimal" aria-describedby="weight-step-help" placeholder="e.g. 1.75" value={customKg} onChange={e => updateCustomKg(e.target.value)} onBlur={() => {
+                    if (!/^\d+(?:\.(?:25|5|50|75))?$/.test(customKg) || Number(customKg) < 0.25) setCustomKg((weightGrams / 1000).toString());
+                  }} />
+                </label>
+              </div>
+              <small id="weight-step-help" className="weight-step-help">For 1 kg and 250 g, enter 1.25. For 1 kg and 500 g, enter 1.5; for 1 kg and 750 g, enter 1.75.</small>
+              <p className="weight-total">Selected {displayWeight(weightGrams)} · Item total <b>{format(snack.price * chosenKg)}</b></p>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button className="button" onClick={() => add(snack)}>
+            <button className="button" onClick={() => add(selectedSnack)}>
               <ShoppingBag size={18} style={{ marginRight: 6 }} /> Add to Cart
             </button>
-            <button className="button" style={{ background: '#16a34a' }} onClick={() => { add(snack); nav('/cart'); }}>
+            <button className="button" style={{ background: '#16a34a' }} onClick={() => { add(selectedSnack); nav('/cart'); }}>
               Buy Now / Checkout
             </button>
           </div>
@@ -734,7 +818,9 @@ function SnackDetail() {
 /* ------------------------------------------------------------------ */
 function CartPage({ onOpenCare }) {
   const { items, change } = useCart();
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const lineTotal = item => item.price * item.quantity * (item.weightGrams ? item.weightGrams / 1000 : 1);
+  const weightLabel = item => item.weightGrams ? (item.weightGrams >= 1000 ? item.weightGrams / 1000 + ' kg' : item.weightGrams + ' g') + ' each' : '';
+  const total = items.reduce((sum, item) => sum + lineTotal(item), 0);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -754,18 +840,19 @@ function CartPage({ onOpenCare }) {
         <>
           <div className="cart-list">
             {items.map(item => (
-              <div className="cart-item" key={item._id}>
+              <div className="cart-item" key={item.cartKey || item._id}>
                 <div className="mini-image">
                   {item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : item.name[0]}
                 </div>
                 <div>
                   <h3>{item.name}</h3>
-                  <p>{format(item.price)} per {item.unit || 'piece'}</p>
+                  <p>{format(item.price)} per {item.unit || 'piece'}{weightLabel(item) ? ' · ' + weightLabel(item) : ''}</p>
+                  {item.weightGrams && <p className="cart-weight-total">{format(lineTotal(item))} for this selection</p>}
                 </div>
                 <div className="quantity">
-                  <button onClick={() => change(item._id, item.quantity - 1)}><Minus size={15} /></button>
+                  <button onClick={() => change(item.cartKey || item._id, item.quantity - 1)}><Minus size={15} /></button>
                   <b>{item.quantity}</b>
-                  <button onClick={() => change(item._id, item.quantity + 1)}><Plus size={15} /></button>
+                  <button onClick={() => change(item.cartKey || item._id, item.quantity + 1)}><Plus size={15} /></button>
                 </div>
               </div>
             ))}
@@ -815,7 +902,7 @@ function Checkout({ onOpenCare, onOrderSuccess }) {
     queryFn: () => api.get('/settings').then(r => r.data.settings)
   });
 
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity * (item.weightGrams ? item.weightGrams / 1000 : 1), 0);
 
   const orderMutation = useMutation({
     mutationFn: () => {
@@ -835,7 +922,7 @@ function Checkout({ onOpenCare, onOrderSuccess }) {
         deliveryAddress,
         latitude,
         longitude,
-        items: items.map(item => ({ snackId: item._id, quantity: item.quantity }))
+        items: items.map(item => ({ snackId: item._id, quantity: item.quantity, ...(item.weightGrams ? { weightGrams: item.weightGrams } : {}) }))
       });
     },
     onSuccess: response => {
@@ -1270,10 +1357,23 @@ function EnhancedMenuManager() {
   const [editingId, setEditingId] = useState(null);
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState('');
+  const [categoryForm, setCategoryForm] = useState({ name: '', imageUrl: '' });
+  const [categoryFile, setCategoryFile] = useState(null);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
 
   const { data: snacks = [] } = useQuery({
     queryKey: ['admin-snacks'],
     queryFn: () => api.get('/snacks?includeInactive=true').then(r => r.data.snacks),
+    enabled: user?.role === 'admin'
+  });
+  const { data: adminCategories = [] } = useQuery({
+    queryKey: ['admin-categories'],
+    queryFn: () => api.get('/categories/admin').then(r => r.data.categories),
+    enabled: user?.role === 'admin'
+  });
+  const { data: categoryOptions = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.get('/categories').then(r => r.data.categories),
     enabled: user?.role === 'admin'
   });
 
@@ -1311,6 +1411,7 @@ function EnhancedMenuManager() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-snacks'] });
       qc.invalidateQueries({ queryKey: ['snacks'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
       setForm(emptySnack);
       setEditingId(null);
       setMessage('✅ Snack saved to menu!');
@@ -1323,6 +1424,7 @@ function EnhancedMenuManager() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-snacks'] });
       qc.invalidateQueries({ queryKey: ['snacks'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
       setForm(emptySnack);
       setEditingId(null);
       setMessage('🗑️ Snack permanently deleted from menu database.');
@@ -1335,8 +1437,49 @@ function EnhancedMenuManager() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-snacks'] });
       qc.invalidateQueries({ queryKey: ['snacks'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
     }
   });
+
+  const saveCategoryMutation = useMutation({
+    mutationFn: async () => {
+      let imageUrl = categoryForm.imageUrl;
+      if (categoryFile) {
+        const uploadBody = new FormData();
+        uploadBody.append('images', categoryFile);
+        const uploaded = await api.post('/uploads/image', uploadBody);
+        imageUrl = uploaded.data.imageUrls[0];
+      }
+      const payload = { ...categoryForm, imageUrl };
+      return editingCategoryId ? api.patch(`/categories/${editingCategoryId}`, payload) : api.post('/categories', payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      setCategoryForm({ name: '', imageUrl: '' });
+      setCategoryFile(null);
+      setEditingCategoryId(null);
+      setMessage('✅ Category saved. It is now available in the snack category dropdown.');
+    },
+    onError: e => setMessage(`❌ ${e.response?.data?.message || 'Could not save category.'}`)
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: category => category.derived
+      ? api.post('/categories', { name: category.name, imageUrl: '', active: false })
+      : api.patch(`/categories/${category._id}`, { active: !category.active }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      setMessage('Category image entry removed. Existing snacks are unchanged.');
+    }
+  });
+
+  const startCategoryEdit = category => {
+    setEditingCategoryId(category.derived ? null : category._id);
+    setCategoryForm({ name: category.name, imageUrl: category.imageUrl || '' });
+    setCategoryFile(null);
+  };
 
   if (user?.role !== 'admin') return <Navigate to="/" />;
 
@@ -1369,7 +1512,7 @@ function EnhancedMenuManager() {
         <p className="muted">Create snacks, upload photos via Cloudinary, remove photos, edit, or delete items permanently.</p>
       </div>
 
-      <div className="menu-manager-grid">
+      <div className="manager-stack">
         <form className="snack-editor" onSubmit={e => { e.preventDefault(); saveMutation.mutate(form); }}>
           <h2>{editingId ? 'Edit Snack' : 'Create New Snack'}</h2>
           {message && <p className={message.includes('❌') ? 'error' : 'success-note'}>{message}</p>}
@@ -1420,7 +1563,9 @@ function EnhancedMenuManager() {
           <div className="editor-grid">
             <label>
               Category
-              <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                {categoryOptions.map(category => <option key={category._id} value={category.name}>{category.name}</option>)}
+              </select>
             </label>
             <label>
               Full Price (₹)
@@ -1491,9 +1636,42 @@ function EnhancedMenuManager() {
           )}
         </form>
 
+        <section className="category-manager">
+          <div>
+            <p className="eyebrow">Browse page</p>
+            <h2>Category images</h2>
+            <p className="muted">Add each category once, then use its exact name on snacks. Its image will appear in Browse Snacks.</p>
+          </div>
+          <div className="category-editor">
+            <label>Category name
+              <input value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="e.g. Pickles" />
+            </label>
+            <label>Category image <span className="category-upload-hint">Uploads to Cloudinary when you save</span>
+              <input type="file" accept="image/*" onChange={e => setCategoryFile(e.target.files?.[0] || null)} />
+            </label>
+            <label>Or image URL
+              <input value={categoryForm.imageUrl} onChange={e => setCategoryForm({ ...categoryForm, imageUrl: e.target.value })} placeholder="https://..." />
+            </label>
+            <button type="button" className="button" disabled={!categoryForm.name.trim() || saveCategoryMutation.isPending} onClick={() => saveCategoryMutation.mutate()}>
+              {saveCategoryMutation.isPending ? 'Uploading & saving...' : editingCategoryId ? 'Save category changes' : 'Save category'}
+            </button>
+            {editingCategoryId && <button type="button" className="text-btn" onClick={() => { setEditingCategoryId(null); setCategoryForm({ name: '', imageUrl: '' }); setCategoryFile(null); }}>Cancel edit</button>}
+          </div>
+          {adminCategories.length > 0 && <div className="admin-category-grid">
+            {adminCategories.map(category => <article key={category._id}>
+              <img src={category.imageUrl || DEFAULT_CATEGORY_IMAGE} alt="" />
+              <div><b>{category.name}</b><span>{category.derived ? 'Default category' : category.active ? 'Category image' : 'Hidden from customers'}</span></div>
+              <div className="category-card-actions">
+                <button type="button" className="text-btn" onClick={() => startCategoryEdit(category)}>Edit</button>
+                <button type="button" className="text-btn" style={{ color: category.active ? '#dc2626' : '#166534' }} onClick={() => { if (window.confirm((category.active ? 'Hide ' : 'Restore ') + 'category ' + category.name + '? Snacks will not be deleted.')) deleteCategoryMutation.mutate(category); }}>{category.active ? 'Delete' : 'Restore'}</button>
+              </div>
+            </article>)}
+          </div>}
+        </section>
+
         <div className="manager-list">
           <h2>Current Snacks ({snacks.length})</h2>
-          {snacks.map(s => (
+          <div className="manager-snack-grid">{snacks.map(s => (
             <article className={`manager-snack ${!s.active ? 'inactive' : ''}`} key={s._id}>
               <img src={s.imageUrl || s.imageUrls?.[0] || ''} alt="" />
               <div style={{ flex: 1 }}>
@@ -1511,7 +1689,7 @@ function EnhancedMenuManager() {
                 }}>Delete</button>
               </div>
             </article>
-          ))}
+          ))}</div>
         </div>
       </div>
     </section>
@@ -1598,7 +1776,7 @@ function Profile() {
   const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
-    <section className="section narrow">
+    <section className="section profile-page">
       <p className="eyebrow">Reddy's Home Foods Account</p>
       <h1>My Account Profile</h1>
       {notice && <p className="success-note">{notice}</p>}
