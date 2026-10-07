@@ -156,9 +156,9 @@ function CustomerCareModal({ open, onClose }) {
     queryFn: () => api.get('/settings').then(r => r.data.settings)
   });
   if (!open) return null;
-  const phone = settingsData?.storePhone || '+91 98765 43210';
-  const email = settingsData?.storeEmail || 'support@reddyshomefoods.com';
-  const address = settingsData?.storeAddress || "Reddy's Home Foods, Main Road, Gourmet Plaza, Suite 10";
+  const phone = settingsData?.storePhone || '+91 7013943406';
+  const email = settingsData?.storeEmail || 'karyadavaraprasad@gmail.com';
+  const address = settingsData?.storeAddress || "Hindupuri Colony, Karimnagar,Telangana 10-3-392/3,Road No:3/A pincode:505001";
   const notice = settingsData?.customerCareNotice || "Available Mon-Sat 9 AM - 9 PM for order confirmation, custom batches & support at Reddy's Home Foods.";
 
   return (
@@ -648,7 +648,7 @@ function SnackDetail() {
   const [activeImg, setActiveImg] = useState(0);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
-  const [weightGrams, setWeightGrams] = useState(250);
+  const [weightGrams, setWeightGrams] = useState(1000);
   const [customKg, setCustomKg] = useState('0.25');
 
   const { data: snackResult, isLoading } = useQuery({
@@ -733,7 +733,7 @@ function SnackDetail() {
             <span>{snack.pickupAvailable && 'Pickup'}{snack.pickupAvailable && snack.deliveryAvailable && ' · '}{snack.deliveryAvailable && 'Delivery'}</span>
           </div>
           <strong className="product-price">{format(snack.price)} <small style={{ fontSize: '16px', color: '#64748b' }}>per {unit}</small></strong>
-          <p style={{ color: '#16a34a', fontWeight: 600, margin: '8px 0 20px' }}>Full payment upon confirmation / delivery. Zero advance required.</p>
+          {/* <p style={{ color: '#16a34a', fontWeight: 600, margin: '8px 0 20px' }}>Full payment upon confirmation / delivery. Zero advance required.</p> */}
           {isWeightPriced && (
             <div className="weight-selector">
               <div className="weight-selector-head">
@@ -752,7 +752,7 @@ function SnackDetail() {
                   }} />
                 </label>
               </div>
-              <small id="weight-step-help" className="weight-step-help">For 1 kg and 250 g, enter 1.25. For 1 kg and 500 g, enter 1.5; for 1 kg and 750 g, enter 1.75.</small>
+              <small id="weight-step-help" className="weight-step-help">use can also enter value in the custom box For example 5 kg and 250 g -- enter 5.25. For 5 kg and 500 g -- enter 5.5, for 5 kg and 750 g -- enter 5.75.</small>
               <p className="weight-total">Selected {displayWeight(weightGrams)} · Item total <b>{format(snack.price * chosenKg)}</b></p>
             </div>
           )}
@@ -992,7 +992,7 @@ function Checkout({ onOpenCare, onOrderSuccess }) {
           <Phone size={20} />
           <div>
             <b>We will call to confirm within 10–15 mins</b>
-            <p>Total amount: <strong>{format(total)}</strong>. Full payment confirmed over WhatsApp/Call or upon pickup/delivery.</p>
+            <p>Total amount: <strong>{format(total)}</strong>. Full payment confirmed over WhatsApp/Call or upon pickup/delivery. <br></br> <b>Delivery</b>: Delivery charges may apply based on your location and will be communicated via Call/WhatsApp.</p>
           </div>
         </div>
 
@@ -1038,8 +1038,12 @@ function PaginationBar({ currentPage, totalItems, itemsPerPage, onPageChange }) 
   );
 }
 
-function OrderCard({ order, admin = false }) {
+function OrderCard({ order, admin = false, reviewedKeys = new Set() }) {
   const [status, setStatus] = useState(order.status);
+  const [reviewingItem, setReviewingItem] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewError, setReviewError] = useState('');
   const qc = useQueryClient();
 
   const update = useMutation({
@@ -1049,6 +1053,19 @@ function OrderCard({ order, admin = false }) {
       qc.invalidateQueries({ queryKey: ['admin-orders'] });
       qc.invalidateQueries({ queryKey: ['orders'] });
     }
+  });
+  const reviewMutation = useMutation({
+    mutationFn: () => api.post('/reviews', { snackId: reviewingItem.snack, orderId: order._id, rating: reviewRating, comment: reviewComment }),
+    onSuccess: () => {
+      setReviewingItem(null);
+      setReviewComment('');
+      setReviewError('');
+      qc.invalidateQueries({ queryKey: ['my-reviews'] });
+      qc.invalidateQueries({ queryKey: ['reviews', reviewingItem.snack] });
+      qc.invalidateQueries({ queryKey: ['snack', reviewingItem.snack] });
+      qc.invalidateQueries({ queryKey: ['snacks'] });
+    },
+    onError: error => setReviewError(error.response?.data?.message || 'Could not save your review. Please try again.')
   });
 
   const whatsappText = `Hello ${order.customerName},\n\n*Reddy's Home Foods - Order #${order._id.slice(-6).toUpperCase()}*\n${order.items.map(i => `• ${i.name} × ${i.quantity}`).join('\n')}\n\n*Total Amount:* ${format(order.totalAmount)}\n*Fulfilment:* ${order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}\n\nWe are contacting you to confirm your fresh order.`;
@@ -1085,6 +1102,39 @@ function OrderCard({ order, admin = false }) {
 
       <p className="order-items">{order.items.map(i => `${i.name} × ${i.quantity}`).join(', ')}</p>
 
+      {!admin && status === 'delivered' && (
+        <div className="order-review-area">
+          <b>How was your order?</b>
+          <div className="order-review-buttons">
+            {order.items.map(item => {
+              const snackId = item.snack?._id || item.snack;
+              const reviewKey = order._id + ':' + snackId;
+              const reviewed = reviewedKeys.has(reviewKey);
+              return reviewed ? (
+                <span className="reviewed-label" key={reviewKey}><Check size={14} /> Reviewed: {item.name}</span>
+              ) : (
+                <button type="button" className="review-order-button" key={reviewKey} onClick={() => { setReviewingItem({ ...item, snack: snackId }); setReviewComment(''); setReviewError(''); }}>
+                  <Star size={14} /> Review {item.name}
+                </button>
+              );
+            })}
+          </div>
+          {reviewingItem && (
+            <form className="inline-review-form" onSubmit={event => { event.preventDefault(); reviewMutation.mutate(); }}>
+              <div><b>Reviewing {reviewingItem.name}</b><button type="button" className="text-btn" onClick={() => setReviewingItem(null)}>Cancel</button></div>
+              <label>Rating
+                <select value={reviewRating} onChange={event => setReviewRating(Number(event.target.value))}>
+                  {[5, 4, 3, 2, 1].map(value => <option key={value} value={value}>{value} star{value > 1 ? 's' : ''}</option>)}
+                </select>
+              </label>
+              <textarea required minLength="3" maxLength="600" value={reviewComment} onChange={event => setReviewComment(event.target.value)} placeholder="Tell other customers about this snack..." />
+              {reviewError && <p className="error">{reviewError}</p>}
+              <button className="button small" disabled={reviewMutation.isPending}>{reviewMutation.isPending ? 'Saving review...' : 'Submit review'}</button>
+            </form>
+          )}
+        </div>
+      )}
+
       <div className="order-bottom">
         <span>{order.fulfilment === 'delivery' ? <><MapPin size={15} /> Delivery</> : 'Store Pickup'} · Total: <strong>{format(order.totalAmount)}</strong></span>
 
@@ -1117,6 +1167,11 @@ function Orders() {
     queryFn: () => api.get('/orders/my-orders').then(r => r.data.orders),
     enabled: !!user
   });
+  const { data: myReviews = [] } = useQuery({
+    queryKey: ['my-reviews'],
+    queryFn: () => api.get('/reviews/mine').then(r => r.data.reviews),
+    enabled: !!user
+  });
 
   if (!user) return <Navigate to="/login" />;
 
@@ -1126,6 +1181,7 @@ function Orders() {
 
   const list = tab === 'active' ? activeOrders : pastOrders;
   const paginated = list.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const reviewedKeys = new Set(myReviews.map(review => `${review.order}:${review.snack}`));
 
   return (
     <section className="section narrow">
@@ -1148,7 +1204,7 @@ function Orders() {
       ) : (
         <>
           <div className="order-list">
-            {paginated.map(order => <OrderCard key={order._id} order={order} />)}
+            {paginated.map(order => <OrderCard key={order._id} order={order} reviewedKeys={reviewedKeys} />)}
           </div>
           <PaginationBar currentPage={page} totalItems={list.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={p => setPage(p)} />
         </>
