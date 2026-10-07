@@ -752,7 +752,7 @@ function SnackDetail() {
                   }} />
                 </label>
               </div>
-              <small id="weight-step-help" className="weight-step-help">use can also enter value in the custom box For example 5 kg and 250 g -- enter 5.25. For 5 kg and 500 g -- enter 5.5, for 5 kg and 750 g -- enter 5.75.</small>
+              <small id="weight-step-help" className="weight-step-help">You can also enter value in the custom box For example 5 kg and 250 g -- enter 5.25. For 5 kg and 500 g -- enter 5.5, for 5 kg and 750 g -- enter 5.75.</small>
               <p className="weight-total">Selected {displayWeight(weightGrams)} · Item total <b>{format(snack.price * chosenKg)}</b></p>
             </div>
           )}
