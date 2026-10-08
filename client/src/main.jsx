@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, Filter, LogOut, MapPin, Menu as MenuIcon, MessageCircle, Minus, Phone, Plus, Search, ShoppingBag, Star, X, Upload, Headphones, Sparkles, Mail, CheckCircle, Trash2, ArrowRight, ShoppingCart, ChevronLeft, ChevronRight, Check, AlertCircle, Home, FileText } from 'lucide-react';
-import { api } from './api';
+import { api, clearAccessToken, saveAccessToken } from './api';
 import './styles.css';
 import './admin.css';
 import './features.css';
@@ -352,7 +352,7 @@ function AppShell() {
   }), [items]);
 
   return (
-    <Auth.Provider value={{ user, setUser, logout: async () => { await api.post('/auth/logout'); setUser(null); qc.clear(); nav('/'); } }}>
+    <Auth.Provider value={{ user, setUser, logout: async () => { await api.post('/auth/logout'); clearAccessToken(); setUser(null); qc.clear(); nav('/'); } }}>
       <Cart.Provider value={cart}>
         <ScrollToTop />
         <Header onOpenCare={() => setShowCareModal(true)} />
@@ -366,6 +366,7 @@ function AppShell() {
             <Route path="/menu" element={<Menu />} />
             <Route path="/snack/:id" element={<SnackDetail />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/callback" element={<GoogleAuthCallback />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/cart" element={<CartPage onOpenCare={() => setShowCareModal(true)} />} />
             <Route path="/checkout" element={<Checkout onOpenCare={() => setShowCareModal(true)} onOrderSuccess={order => setPlacedOrder(order)} />} />
@@ -1933,6 +1934,31 @@ function Profile() {
 /* ------------------------------------------------------------------ */
 /* Login & Authentication Component                                    */
 /* ------------------------------------------------------------------ */
+function GoogleAuthCallback() {
+  const { setUser } = useAuth();
+  const nav = useNavigate();
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.hash.slice(1)).get('token');
+    // Remove the token from browser history before any other navigation.
+    window.history.replaceState(null, '', '/auth/callback');
+    if (!token) {
+      setError('Google sign-in did not return a session. Please try again.');
+      return;
+    }
+    saveAccessToken(token);
+    api.get('/auth/me')
+      .then(result => { setUser(result.data.user); nav('/'); })
+      .catch(() => {
+        clearAccessToken();
+        setError('We could not complete your Google sign-in. Please try again.');
+      });
+  }, [nav, setUser]);
+
+  return <section className="section narrow"><LoadingState label={error || 'Completing your Google sign-in...'} /></section>;
+}
+
 function Login() {
   const { user, setUser } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -1947,6 +1973,7 @@ function Login() {
     setError('');
     try {
       const res = await api.post(register ? '/auth/register' : '/auth/login', register ? form : { email: form.email, password: form.password });
+      if (res.data.token) saveAccessToken(res.data.token);
       setUser(res.data.user);
       nav('/');
     } catch (err) {

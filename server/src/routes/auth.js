@@ -9,7 +9,11 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 const cookieOptions = { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 86400000 };
-const issue = (res, user) => res.cookie('token', jwt.sign({ sub: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' }), cookieOptions).json({ user: publicUser(user) });
+const createToken = user => jwt.sign({ sub: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const issue = (res, user) => {
+  const token = createToken(user);
+  return res.cookie('token', token, cookieOptions).json({ user: publicUser(user), token });
+};
 const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, address: u.address, addresses: u.addresses || [], role: u.role });
 
 router.post('/register', validate(z.object({ name: z.string().min(2).max(80), email: z.string().email(), password: z.string().min(8).max(100) })), async (req, res, next) => { try {
@@ -45,5 +49,11 @@ router.all('/test-email', async (req, res, next) => {
 });
 
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
-router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=google` }), (req, res) => { res.cookie('token', jwt.sign({ sub: req.user.id }, process.env.JWT_SECRET, { expiresIn: '7d' }), cookieOptions); res.redirect(`${process.env.CLIENT_URL}/`); });
+router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=google` }), (req, res) => {
+  const token = createToken(req.user);
+  res.cookie('token', token, cookieOptions);
+  const destination = new URL('/auth/callback', process.env.CLIENT_URL);
+  destination.hash = `token=${encodeURIComponent(token)}`;
+  res.redirect(destination.toString());
+});
 export default router;
